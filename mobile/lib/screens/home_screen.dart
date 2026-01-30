@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/screens/level_detail.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +21,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     {'level': 'Level 1', 'available': 45, 'total': 100},
     {'level': 'Level 2', 'available': 23, 'total': 100},
     {'level': 'Level 3', 'available': 67, 'total': 100},
-    {'level': 'Level 4', 'available': 12, 'total': 100},
   ];
 
   @override
@@ -169,14 +169,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
     return GestureDetector(
       onTap: () {
-        // Navigate to LevelDetailScreen and pass the level data
-        // Navigator.push(
-        //   context,
-        //   MaterialPageRoute(
-        //     builder: (context) => LevelDetailScreen(level: level),
-        //   ),
-        // );
+        // Pass the correct levelName to LevelDetailScreen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => LevelDetailScreen(levelName: level['level'])),
+        );
       },
+
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(16),
