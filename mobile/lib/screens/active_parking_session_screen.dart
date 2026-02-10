@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/screens/bottom_navigation.dart';
+import 'package:mobile/screens/payment_successful_screen.dart';
 
 class ActiveParkingSessionScreen extends StatelessWidget {
   const ActiveParkingSessionScreen({super.key});
@@ -20,7 +21,7 @@ class ActiveParkingSessionScreen extends StatelessWidget {
               const SizedBox(height: 16),
               _buildDurationCard(),
               const SizedBox(height: 20),
-              _buildExitButton(),
+              _buildExitButton(context),
             ],
           ),
         ),
@@ -219,14 +220,19 @@ class ActiveParkingSessionScreen extends StatelessWidget {
   }
 
   // ---------------- EXIT BUTTON ----------------
-  Widget _buildExitButton() {
+  Widget _buildExitButton(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: SizedBox(
         width: double.infinity,
         height: 54,
         child: ElevatedButton(
-          onPressed: () {},
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PaymentSuccessfulScreen()),
+            );
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),

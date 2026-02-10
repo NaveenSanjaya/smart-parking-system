@@ -97,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               const SizedBox(height: 12),
-              ...parkingLevels.map(_buildParkingLevelCard).toList(),
+              ...parkingLevels.map(_buildParkingLevelCard),
             ],
           ),
         ),

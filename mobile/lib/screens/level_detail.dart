@@ -5,7 +5,7 @@ import 'package:mobile/models/zone_model.dart';
 class LevelDetailScreen extends StatefulWidget {
   final String levelName;
 
-  LevelDetailScreen({Key? key, required this.levelName}) : super(key: key);
+  const LevelDetailScreen({super.key, required this.levelName});
 
   @override
   State<LevelDetailScreen> createState() => _LevelDetailScreenState();

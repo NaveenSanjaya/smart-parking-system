@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 
 class AddVehicleScreen extends StatefulWidget {
-  const AddVehicleScreen({super.key});
+  final String? vehicleType;
+  final String? plateNumber;
+  final bool isPrimary;
+
+  const AddVehicleScreen({super.key, this.vehicleType, this.plateNumber, this.isPrimary = false});
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
@@ -14,6 +18,17 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
   bool isPrimary = true;
   String? selectedVehicleType;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.plateNumber != null) {
+      plateController.text = widget.plateNumber!;
+      selectedVehicleType = widget.vehicleType;
+      isPrimary = widget.isPrimary;
+    }
+  }
+
   IconData _vehicleIcon(String type) {
     switch (type) {
       case 'Car':
@@ -43,18 +58,20 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 const SizedBox(height: 60),
 
                 // Title
-                const Text(
-                  'Add Your Vehicle',
-                  style: TextStyle(
+                Text(
+                  widget.plateNumber != null ? 'Edit Vehicle' : 'Add Your Vehicle',
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppColors.primaryColor,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Register your vehicle to continue',
-                  style: TextStyle(color: Color.fromARGB(255, 112, 112, 112)),
+                Text(
+                  widget.plateNumber != null
+                      ? 'Update your vehicle details'
+                      : 'Register your vehicle to continue',
+                  style: const TextStyle(color: Color.fromARGB(255, 112, 112, 112)),
                 ),
 
                 const SizedBox(height: 30),
@@ -186,7 +203,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
-                  child: const Text('Add Vehicle', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    widget.plateNumber != null ? 'Update Vehicle' : 'Add Vehicle',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
 
                 const SizedBox(height: 16),
@@ -195,10 +215,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 Center(
                   child: TextButton(
                     onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        // Save vehicle later
-                        Navigator.pushNamed(context, '/home');
-                      }
+                      Navigator.pushNamed(context, '/home');
                     },
 
                     child: const Text(

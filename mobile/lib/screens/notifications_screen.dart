@@ -52,7 +52,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (removedIndex != -1) {
         // If the removed notification was unread, decrement the global unread counter.
         if (notifications[removedIndex].isUnread) {
-          unreadCountNotifier.value = (unreadCountNotifier.value - 1).clamp(0, 999) as int;
+          unreadCountNotifier.value = (unreadCountNotifier.value - 1).clamp(0, 999);
         }
         notifications.removeAt(removedIndex);
       }
@@ -62,7 +62,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    unreadCountNotifier.value = unreadCount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unreadCountNotifier.value = unreadCount;
+    });
   }
 
   void _markAllRead() {
