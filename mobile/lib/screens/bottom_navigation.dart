@@ -1,0 +1,82 @@
+import 'package:flutter/material.dart';
+import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/screens/active_parking_session_screen.dart';
+import 'package:mobile/screens/global_screens/notification_state.dart';
+import 'package:mobile/screens/home_screen.dart';
+import 'package:mobile/screens/notifications_screen.dart';
+import 'package:mobile/screens/history_screen.dart';
+import 'package:mobile/screens/profile_screen.dart';
+
+class BottomNavigation extends StatefulWidget {
+  const BottomNavigation({super.key});
+
+  @override
+  State<BottomNavigation> createState() => _BottomNavigationState();
+}
+
+class _BottomNavigationState extends State<BottomNavigation> {
+  final List<Widget> _pages = const [
+    HomeScreen(),
+    ActiveParkingSessionScreen(),
+    NotificationsScreen(),
+    HistoryScreen(),
+    ProfileScreen(),
+  ];
+
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppColors.primaryColor,
+        unselectedItemColor: Colors.grey,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          const BottomNavigationBarItem(icon: Icon(Icons.qr_code), label: 'Scan'),
+          BottomNavigationBarItem(
+            icon: ValueListenableBuilder<int>(
+              valueListenable: unreadCountNotifier,
+              builder: (_, count, __) {
+                return Stack(
+                  children: [
+                    const Icon(Icons.notifications),
+                    if (count > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            count.toString(),
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            label: 'Alerts',
+          ),
+
+          const BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+          const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
