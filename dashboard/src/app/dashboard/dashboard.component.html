@@ -110,8 +110,13 @@
             <!-- Lower Content Area for Charts and Lists -->
             <div class="dashboard-lower">
                 <div class="chart-container">
-                    <div class="chart-header">
+                    <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center;">
                         <h4>Parking Usage Trends</h4>
+                        <div class="time-filters">
+                            <button [class.active]="activeTimeFilter === 'Today'" (click)="setTimeFilter('Today')" class="filter-btn">Today</button>
+                            <button [class.active]="activeTimeFilter === 'Week'" (click)="setTimeFilter('Week')" class="filter-btn">Week</button>
+                            <button [class.active]="activeTimeFilter === 'Month'" (click)="setTimeFilter('Month')" class="filter-btn">Month</button>
+                        </div>
                     </div>
                     <div class="chart-wrapper">
                         <canvas baseChart [data]="barChartData" [options]="barChartOptions" [type]="barChartType">

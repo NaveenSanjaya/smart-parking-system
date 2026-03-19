@@ -104,4 +104,39 @@ export class DashboardComponent {
       time: '22 mins ago'
     }
   ];
+
+  activeTimeFilter: 'Today' | 'Week' | 'Month' = 'Week';
+
+  setTimeFilter(filter: 'Today' | 'Week' | 'Month') {
+    this.activeTimeFilter = filter;
+    
+    if (filter === 'Today') {
+      this.totalRevenue.amount = 'LKR 45,200.00';
+      this.totalRevenue.label = '↑ +12% from yesterday';
+      this.activeUsers.count = 45;
+      this.activeUsers.label = '↑ +5% vs yesterday';
+      
+      this.barChartData.labels = ['6am', '9am', '12pm', '3pm', '6pm', '9pm'];
+      this.barChartData.datasets[0].data = [20, 50, 85, 95, 70, 30];
+    } else if (filter === 'Week') {
+      this.totalRevenue.amount = 'LKR 124,550.00';
+      this.totalRevenue.label = '↑ +4% from last week';
+      this.activeUsers.count = 88;
+      this.activeUsers.label = '↑ +12% vs last week';
+      
+      this.barChartData.labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      this.barChartData.datasets[0].data = [65, 72, 85, 90, 95, 82, 55];
+    } else if (filter === 'Month') {
+      this.totalRevenue.amount = 'LKR 512,800.00';
+      this.totalRevenue.label = '↑ +8% from last month';
+      this.activeUsers.count = 342;
+      this.activeUsers.label = '↑ +15% vs last month';
+      
+      this.barChartData.labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+      this.barChartData.datasets[0].data = [400, 450, 420, 480];
+    }
+    
+    // Trigger chart update safely
+    this.barChartData = { ...this.barChartData };
+  }
 }

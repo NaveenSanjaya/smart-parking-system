@@ -1,0 +1,117 @@
+<div class="dashboard-layout">
+  <app-sidebar class="dashboard-sidebar"></app-sidebar>
+  <main class="dashboard-main page-container">
+    <div class="page-header">
+      <div class="header-titles">
+        <h1>Reports & Analytics</h1>
+        <p>View detailed financial reports and user statistics.</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-outline">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Export Report
+        </button>
+      </div>
+    </div>
+
+    <div class="tabs-container">
+      <button class="tab-btn active">Revenue Analysis</button>
+      <button class="tab-btn">User Statistics</button>
+    </div>
+
+    <div class="filter-card">
+      <div class="filter-group">
+        <span class="filter-label">Date Range:</span>
+        <div class="input-with-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          <input type="text" value="Dec 19, 2025 - Dec 26, 2025" readonly/>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card border-slate">
+        <div class="stat-header">
+          <h3>Total Revenue</h3>
+          <div class="icon slate">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="1" x2="12" y2="23"></line>
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-body">
+          <h2><span class="currency">LKR</span> 275,998</h2>
+          <p>For the selected period</p>
+        </div>
+      </div>
+      <div class="stat-card border-green">
+        <div class="stat-header">
+          <h3>Transactions</h3>
+          <div class="icon green">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-body">
+          <h2>562</h2>
+          <p>Total payments processed</p>
+        </div>
+      </div>
+      <div class="stat-card border-orange">
+        <div class="stat-header">
+          <h3>Avg. Transaction</h3>
+          <div class="icon orange">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+              <line x1="1" y1="10" x2="23" y2="10"></line>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-body">
+          <h2><span class="currency">LKR</span> 491.10</h2>
+          <p>Average revenue per car</p>
+        </div>
+      </div>
+      <div class="stat-card border-pink">
+        <div class="stat-header">
+          <h3>Daily Average</h3>
+          <div class="icon pink">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+              <polyline points="17 6 23 6 23 12"></polyline>
+            </svg>
+          </div>
+        </div>
+        <div class="stat-body">
+          <h2><span class="currency">LKR</span> 34,500</h2>
+          <p>Average daily revenue</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <h4>Revenue Overview</h4>
+        <p>Daily revenue performance for the selected period.</p>
+      </div>
+      <div class="chart-wrapper">
+        <canvas baseChart
+          [data]="barChartData"
+          [options]="barChartOptions"
+          [type]="barChartType">
+        </canvas>
+      </div>
+    </div>
+  </main>
+</div>

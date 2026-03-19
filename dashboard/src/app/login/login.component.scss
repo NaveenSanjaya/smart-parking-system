@@ -112,6 +112,28 @@
     background-color: #fff;
 }
 
+.error-message {
+    color: #e53e3e;
+    font-size: 11px;
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.form-group.has-error input[type="email"],
+.form-group.has-error input[type="password"],
+.form-group.has-error .password-input-wrapper input[type="text"] {
+    border-color: #fc8181;
+    background-color: #fff5f5;
+}
+
+.form-group.has-error input:focus {
+    box-shadow: 0 0 0 3px rgba(229, 62, 62, 0.1);
+}
+
+.required {
+    color: #e53e3e;
+}
+
 .password-input-wrapper {
     position: relative;
     display: flex;
