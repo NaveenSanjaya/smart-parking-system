@@ -170,7 +170,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
           margin: const EdgeInsets.symmetric(horizontal: 5),
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.white.withOpacity(0.25),
+            color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -207,7 +207,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -288,7 +288,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10)],
       ),
       child: Row(
         children: [

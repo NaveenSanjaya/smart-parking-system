@@ -208,9 +208,9 @@ class ActiveParkingSessionScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: const [
-                _timeBox('00', 'Hours'),
-                _timeBox('02', 'Minutes'),
-                _timeBox('31', 'Seconds'),
+                _TimeBox('00', 'Hours'),
+                _TimeBox('02', 'Minutes'),
+                _TimeBox('31', 'Seconds'),
               ],
             ),
           ],
@@ -248,11 +248,11 @@ class ActiveParkingSessionScreen extends StatelessWidget {
 }
 
 // ---------------- TIME BOX ----------------
-class _timeBox extends StatelessWidget {
+class _TimeBox extends StatelessWidget {
   final String value;
   final String label;
 
-  const _timeBox(this.value, this.label);
+  const _TimeBox(this.value, this.label);
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +260,7 @@ class _timeBox extends StatelessWidget {
       width: 80,
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(

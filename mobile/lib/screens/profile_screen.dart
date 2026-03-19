@@ -5,8 +5,56 @@ import 'package:mobile/screens/change_password_screen.dart';
 import 'package:mobile/screens/login_screen.dart';
 import 'package:mobile/screens/view_rates_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final List<Map<String, dynamic>> _vehicles = [
+    {
+      'plateNumber': 'ABC-1234',
+      'type': 'Car',
+      'isPrimary': true,
+      'icon': Icons.directions_car,
+    },
+    {
+      'plateNumber': 'XYZ-5678',
+      'type': 'Bike',
+      'isPrimary': false,
+      'icon': Icons.motorcycle,
+    },
+  ];
+
+  void _deleteVehicle(String plateNumber) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Vehicle'),
+        content: Text('Are you sure you want to delete vehicle $plateNumber?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _vehicles.removeWhere((v) => v['plateNumber'] == plateNumber);
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Vehicle deleted successfully'), backgroundColor: Colors.red),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,21 +79,19 @@ class ProfileScreen extends StatelessWidget {
                     );
                   }),
 
-                  _buildVehicleCard(
-                    context,
-                    'ABC-1234',
-                    'Car',
-                    isPrimary: true,
-                    icon: Icons.directions_car,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildVehicleCard(
-                    context,
-                    'XYZ-5678',
-                    'Bike',
-                    isPrimary: false,
-                    icon: Icons.motorcycle,
-                  ),
+                  ..._vehicles.map((v) => Column(
+                        children: [
+                          _buildVehicleCard(
+                            context,
+                            v['plateNumber'],
+                            v['type'],
+                            isPrimary: v['isPrimary'],
+                            icon: v['icon'],
+                            onDelete: () => _deleteVehicle(v['plateNumber']),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      )),
                   const SizedBox(height: 24),
                   _buildSectionTitle('Settings'),
                   _buildSettingsCard(context),
@@ -69,7 +115,7 @@ class ProfileScreen extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -167,7 +213,7 @@ class ProfileScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: const Color(0xFF00695C).withOpacity(0.1),
+            color: const Color(0xFF00695C).withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: const Color(0xFF00695C), size: 20),
@@ -200,6 +246,7 @@ class ProfileScreen extends StatelessWidget {
     String type, {
     required bool isPrimary,
     required IconData icon,
+    required VoidCallback onDelete,
   }) {
     return Card(
       elevation: 2,
@@ -277,7 +324,7 @@ class ProfileScreen extends StatelessWidget {
               );
             }),
             const SizedBox(width: 8),
-            _buildActionButton(Icons.delete_outline, Colors.red, () {}),
+            _buildActionButton(Icons.delete_outline, Colors.red, onDelete),
           ],
         ),
       ),

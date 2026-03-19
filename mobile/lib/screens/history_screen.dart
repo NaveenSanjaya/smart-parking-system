@@ -38,6 +38,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     },
   ];
 
+  List<Map<String, dynamic>> get _filteredData {
+    if (_selectedFilter == 'All') return _historyData;
+    if (_selectedFilter == 'This Week') {
+      return _historyData.where((d) => d['date'].contains('Dec 7') || d['date'].contains('Dec 6')).toList();
+    }
+    if (_selectedFilter == 'This Month') {
+      return _historyData.where((d) => d['date'].contains('Dec')).toList();
+    }
+    if (_selectedFilter == 'This Year') {
+      return _historyData.where((d) => d['date'].contains('2025')).toList();
+    }
+    return _historyData;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -51,9 +65,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _historyData.length,
+              itemCount: _filteredData.length,
               itemBuilder: (context, index) {
-                final item = _historyData[index];
+                final item = _filteredData[index];
                 return _buildHistoryCard(item);
               },
             ),
@@ -235,6 +249,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildSummary() {
+    final int totalSessions = _filteredData.length;
+    final double totalSpent = _filteredData.fold(0.0, (sum, item) => sum + item['amount']);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -244,7 +261,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -254,22 +271,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text('Total Sessions', style: TextStyle(color: Colors.white, fontSize: 16)),
+              children: [
+                const Text('Total Sessions', style: TextStyle(color: Colors.white, fontSize: 16)),
                 Text(
-                  '6', // Dummy data matching the list/context
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  '$totalSessions',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Text('Total Spent', style: TextStyle(color: Colors.white, fontSize: 16)),
+              children: [
+                const Text('Total Spent', style: TextStyle(color: Colors.white, fontSize: 16)),
                 Text(
-                  '\$59.00', // Dummy data
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  '\$${totalSpent.toStringAsFixed(2)}',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ],
             ),

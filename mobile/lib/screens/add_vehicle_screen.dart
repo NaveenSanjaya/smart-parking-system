@@ -80,6 +80,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 _buildLabel('Vehicle Type'),
                 DropdownButtonFormField<String>(
                   value: selectedVehicleType,
+                  validator: (value) => value == null ? 'Please select a vehicle type' : null,
                   decoration: InputDecoration(
                     isDense: true,
                     filled: true,
@@ -196,7 +197,17 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
                 // Add Vehicle button
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(widget.plateNumber != null ? 'Vehicle Updated' : 'Vehicle Added'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                    }
+                  },
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(52),
                     backgroundColor: AppColors.primaryColor,

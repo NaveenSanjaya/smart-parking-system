@@ -11,7 +11,9 @@ class LogoScreen extends StatelessWidget {
     // navigate to login screen after 3 seconds
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(seconds: 3), () {
-        Navigator.of(context).pushReplacementNamed('/signIn');
+        if (context.mounted) {
+          Navigator.of(context).pushReplacementNamed('/signIn');
+        }
       });
     });
 

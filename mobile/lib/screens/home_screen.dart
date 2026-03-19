@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           borderRadius: BorderRadius.circular(30),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
@@ -133,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: Colors.white.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.white24),
             ),
@@ -187,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, 6),
             ),

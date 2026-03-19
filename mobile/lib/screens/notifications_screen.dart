@@ -171,18 +171,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case NotificationType.parking:
         icon = Icons.directions_car;
         iconColor = AppColors.teal;
-        iconBg = AppColors.teal.withOpacity(0.15);
+        iconBg = AppColors.teal.withValues(alpha: 0.15);
         break;
       case NotificationType.warning:
         icon = Icons.warning;
         iconColor = Colors.orange;
-        iconBg = Colors.orange.withOpacity(0.15);
+        iconBg = Colors.orange.withValues(alpha: 0.15);
         break;
       case NotificationType.info:
-      default:
         icon = Icons.info;
         iconColor = AppColors.teal;
-        iconBg = AppColors.teal.withOpacity(0.15);
+        iconBg = AppColors.teal.withValues(alpha: 0.15);
     }
 
     return Container(
