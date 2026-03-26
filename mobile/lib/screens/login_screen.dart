@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/services/auth_service.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -12,6 +13,9 @@ class _SignInScreenState extends State<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailPhoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -20,17 +24,33 @@ class _SignInScreenState extends State<SignInScreen> {
     super.dispose();
   }
 
-  void _signIn() {
+  Future<void> _signIn() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.pushReplacementNamed(context, '/home');
+      setState(() => _isLoading = true);
+      try {
+        await _authService.loginUser(
+          _emailPhoneController.text.trim(),
+          _passwordController.text,
+        );
+        if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceAll('Exception: Login failed: ', '')), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
           padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
@@ -158,7 +178,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 9),
                     TextFormField(
                       controller: _passwordController,
-                      obscureText: true,
+                      obscureText: _obscurePassword,
                       style: const TextStyle(color: Colors.black),
                       decoration: InputDecoration(
                         filled: true,
@@ -166,6 +186,10 @@ class _SignInScreenState extends State<SignInScreen> {
                         prefixIcon: const Icon(
                           Icons.lock,
                           color: Color(0xFF6E6D74),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF6E6D74)),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                         ),
                         hintText: 'Password',
                         hintStyle: const TextStyle(color: Color(0xFF6E6D74)),
@@ -216,10 +240,12 @@ class _SignInScreenState extends State<SignInScreen> {
                     backgroundColor: AppColors.primaryColor,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text(
-                    'Sign In',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Sign In',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                 ),
                 const SizedBox(height: 20),
                 const Center(child: Text('OR')),
@@ -267,6 +293,7 @@ class _SignInScreenState extends State<SignInScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

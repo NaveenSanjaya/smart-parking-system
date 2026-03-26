@@ -1,8 +1,11 @@
-import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/screens/level_detail.dart';
 import 'package:mobile/screens/qr_scan_screen.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/models/parking_slot.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,43 +14,17 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<int> _availabilityAnimation;
-
-  final int availableSlots = 236;
-  late String userId;
-
-  final List<Map<String, dynamic>> parkingLevels = [
-    {'level': 'Level 1', 'available': 45, 'total': 100},
-    {'level': 'Level 2', 'available': 23, 'total': 100},
-    {'level': 'Level 3', 'available': 67, 'total': 100},
-  ];
+class _HomeScreenState extends State<HomeScreen> {
+  final AuthService _authService = AuthService();
+  final ParkingService _parkingService = ParkingService();
 
   @override
   void initState() {
     super.initState();
-
-    userId = _generateUserId();
-
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
-
-    _availabilityAnimation = IntTween(
-      begin: 0,
-      end: availableSlots,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-
-    _controller.forward();
-  }
-
-  String _generateUserId() {
-    final random = Random();
-    return 'USR-2024-${1000 + random.nextInt(9000)}';
   }
 
   @override
   void dispose() {
-    _controller.dispose();
     super.dispose();
   }
 
@@ -81,25 +58,39 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
 
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeaderCard(),
-              const SizedBox(height: 24),
-              const Text(
-                'Parking Levels',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primaryColor,
-                ),
+        child: StreamBuilder<List<ParkingSlotModel>>(
+          stream: _parkingService.getAllSlots(),
+          builder: (context, snapshot) {
+            final slots = snapshot.data ?? [];
+            final levels = [1, 2, 3].map((l) {
+               final levelSlots = slots.where((s) => s.levelNumber == l);
+               final available = levelSlots.where((s) => s.status == 'AVAILABLE').length;
+               return {'level': 'Level $l', 'available': available, 'total': levelSlots.isEmpty ? 100 : levelSlots.length};
+            }).toList();
+
+            final totalAvailable = levels.fold<int>(0, (sum, l) => sum + (l['available'] as int));
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeaderCard(totalAvailable.toString()),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Parking Levels',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...levels.map(_buildParkingLevelCard),
+                ],
               ),
-              const SizedBox(height: 12),
-              ...parkingLevels.map(_buildParkingLevelCard),
-            ],
-          ),
+            );
+          }
         ),
       ),
     );
@@ -107,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // ---------------- UI Components ----------------
 
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(String totalAvailable) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -127,7 +118,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           const Text('User ID', style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 4),
-          Text(userId, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          Text(
+             _authService.currentUser?.uid.length != null ? 'USR-${_authService.currentUser!.uid.substring(0, 8)}' : 'Loading...',
+             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)
+          ),
           const SizedBox(height: 20),
           Container(
             width: double.infinity,
@@ -141,22 +135,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               children: [
                 const Text('Available Parking Slots', style: TextStyle(color: Colors.white70)),
                 const SizedBox(height: 12),
-                AnimatedBuilder(
-                  animation: _availabilityAnimation,
-                  builder: (context, child) {
-                    return Text(
-                      _availabilityAnimation.value.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 44,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    );
-                  },
+                Text(
+                  totalAvailable,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 44,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Updated: Just now',
+                  'Updated dynamically',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],

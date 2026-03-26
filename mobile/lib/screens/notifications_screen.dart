@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/models/notification_model.dart';
 import 'package:mobile/screens/global_screens/notification_state.dart' show unreadCountNotifier;
+import 'package:mobile/services/notification_service.dart';
+import 'package:mobile/services/auth_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -11,69 +13,24 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  List<NotificationItem> notifications = [
-    NotificationItem(
-      id: '1',
-      title: 'Payment Successful',
-      message: 'Your parking fee of \$9.00 has been processed successfully.',
-      time: '2 mins ago',
-      type: NotificationType.payment,
-    ),
-    NotificationItem(
-      id: '2',
-      title: 'Parking Session Started',
-      message: 'Your parking session has begun at Level 2, Slot B-24.',
-      time: '2 hours ago',
-      type: NotificationType.parking,
-    ),
-    NotificationItem(
-      id: '3',
-      title: 'New Rate Update',
-      message: 'Parking rates have been updated. Check the new pricing structure.',
-      time: '1 day ago',
-      type: NotificationType.info,
-    ),
-    NotificationItem(
-      id: '4',
-      title: 'Parking Almost Full',
-      message: 'Only 12 slots remaining on Level 4. Consider alternative levels.',
-      time: '2 days ago',
-      type: NotificationType.warning,
-    ),
-  ];
+  final NotificationService _notificationService = NotificationService();
+  final AuthService _authService = AuthService();
+  List<NotificationModel> _currentNotifications = [];
 
-  // add more notifications here...
-
-  int get unreadCount => notifications.where((n) => n.isUnread).length;
-
-  void _removeNotification(String id) {
-    setState(() {
-      final removedIndex = notifications.indexWhere((n) => n.id == id);
-      if (removedIndex != -1) {
-        // If the removed notification was unread, decrement the global unread counter.
-        if (notifications[removedIndex].isUnread) {
-          unreadCountNotifier.value = (unreadCountNotifier.value - 1).clamp(0, 999);
-        }
-        notifications.removeAt(removedIndex);
-      }
-    });
+  String _formatTime(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inDays > 0) return '${diff.inDays} d ago';
+    if (diff.inHours > 0) return '${diff.inHours} hr ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes} m ago';
+    return 'Just now';
   }
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unreadCountNotifier.value = unreadCount;
-    });
-  }
-
-  void _markAllRead() {
-    setState(() {
-      for (var notification in notifications) {
-        notification.isUnread = false;
+  void _markAllRead() async {
+    for (var notification in _currentNotifications) {
+      if (notification.isUnread) {
+        await _notificationService.markAsRead(notification.notificationId);
       }
-      unreadCountNotifier.value = 0;
-    });
+    }
   }
 
   @override
@@ -85,28 +42,49 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           children: [
             _buildHeader(),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: notifications.length,
-                itemBuilder: (context, index) {
-                  final notification = notifications[index];
-                  return Dismissible(
-                    key: ValueKey(notification.id),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade600,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (_) => _removeNotification(notification.id),
-                    child: _notificationCard(notification),
-                  );
-                },
-              ),
+              child: _authService.currentUser == null
+                ? const Center(child: Text('Not logged in'))
+                : StreamBuilder<List<NotificationModel>>(
+                    stream: _notificationService.getUserNotifications(_authService.currentUser!.uid),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Center(child: Text('No notifications yet.'));
+                      }
+                      
+                      _currentNotifications = snapshot.data!;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        unreadCountNotifier.value = _currentNotifications.where((n) => n.isUnread).length;
+                      });
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _currentNotifications.length,
+                        itemBuilder: (context, index) {
+                          final notification = _currentNotifications[index];
+                          return Dismissible(
+                            key: ValueKey(notification.notificationId),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade600,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Icon(Icons.mark_email_read, color: Colors.white),
+                            ),
+                            onDismissed: (_) {
+                               _notificationService.markAsRead(notification.notificationId);
+                            },
+                            child: _notificationCard(notification),
+                          );
+                        },
+                      );
+                    },
+                  ),
             ),
             _markAllReadButton(),
           ],
@@ -142,26 +120,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(20)),
-            child: Text(
-              '$unreadCount new',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
-          ),
+              ValueListenableBuilder<int>(
+                valueListenable: unreadCountNotifier,
+                builder: (context, val, child) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      '$val new',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  );
+                }
+              ),
         ],
       ),
     );
   }
 
   // ---------------- NOTIFICATION CARD ----------------
-  Widget _notificationCard(NotificationItem notification) {
-    IconData icon;
-    Color iconColor;
-    Color iconBg;
+  Widget _notificationCard(NotificationModel notification) {
+    IconData icon = Icons.info;
+    Color iconColor = AppColors.teal;
+    Color iconBg = AppColors.teal.withValues(alpha: 0.15);
 
-    // Determine icon and color based on type
     switch (notification.type) {
       case NotificationType.payment:
         icon = Icons.check_circle;
@@ -211,7 +193,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 Text(notification.message, style: const TextStyle(color: Colors.black87)),
                 const SizedBox(height: 6),
                 Text(
-                  notification.time,
+                  _formatTime(notification.timestamp),
                   style: const TextStyle(fontSize: 12, color: Colors.black54),
                 ),
               ],

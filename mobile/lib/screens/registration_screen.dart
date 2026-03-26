@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,6 +15,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final AuthService _authService = AuthService();
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -21,22 +27,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _register() {
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
-      Navigator.pushReplacementNamed(context, '/add-vehicle');
+      setState(() => _isLoading = true);
+      try {
+        await _authService.registerUser(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          phoneNumber: _phoneController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (mounted) Navigator.pushReplacementNamed(context, '/add-vehicle');
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceAll('Exception: Registration failed: ', '')), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,11 +134,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   hint: 'Enter email address',
                   icon: Icons.email,
                   controller: _emailController,
-                  validator:
-                      (value) =>
-                          value == null || value.trim().isEmpty
-                              ? 'Email is required'
-                              : null,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) return 'Email is required';
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) return 'Enter a valid email';
+                    return null;
+                  },
                 ),
 
                 const SizedBox(height: 17),
@@ -121,14 +146,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Phone Number
                 _buildLabel('Phone Number'),
                 _buildTextField(
-                  hint: '+94 77 123 4567',
+                  hint: '0771234567',
                   icon: Icons.phone,
                   controller: _phoneController,
-                  validator:
-                      (value) =>
-                          value == null || value.trim().isEmpty
-                              ? 'Phone number is required'
-                              : null,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Phone number is required';
+                    }
+                    if (!RegExp(r'^\d{10}$').hasMatch(value.trim())) {
+                      return 'Enter exactly 10 digits';
+                    }
+                    return null;
+                  },
                 ),
 
                 const SizedBox(height: 17),
@@ -138,13 +167,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _buildTextField(
                   hint: 'Password',
                   icon: Icons.lock,
-                  obscure: true,
+                  obscure: _obscurePassword,
                   controller: _passwordController,
-                  validator:
-                      (value) =>
-                          value == null || value.trim().isEmpty
-                              ? 'Password is required'
-                              : null,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF6E6D74)),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) return 'Password is required';
+                    if (value.length < 6) return 'Password must be at least 6 characters';
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 17),
+
+                // Confirm Password
+                _buildLabel('Confirm Password'),
+                _buildTextField(
+                  hint: 'Confirm Password',
+                  icon: Icons.lock,
+                  obscure: _obscureConfirmPassword,
+                  controller: _confirmPasswordController,
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirmPassword ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF6E6D74)),
+                    onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) return 'Confirm password is required';
+                    if (value != _passwordController.text) return 'Passwords do not match';
+                    return null;
+                  },
                 ),
 
                 const SizedBox(height: 24),
@@ -157,10 +210,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     backgroundColor: AppColors.primaryColor,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text(
-                    'Register',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                          'Register',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                 ),
                 const SizedBox(height: 20),
                 const Center(child: Text('OR')),
@@ -212,6 +267,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -240,6 +296,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     bool obscure = false,
     TextEditingController? controller,
     String? Function(String?)? validator,
+    Widget? suffixIcon,
   }) {
     return TextFormField(
       controller: controller,
@@ -249,6 +306,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         filled: true,
         fillColor: AppColors.inputBackground,
         prefixIcon: Icon(icon, color: const Color(0xFF6E6D74)),
+        suffixIcon: suffixIcon,
         hintText: hint,
         hintStyle: const TextStyle(color: Color(0xFF6E6D74)),
         border: OutlineInputBorder(

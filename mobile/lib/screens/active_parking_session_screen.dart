@@ -2,29 +2,63 @@ import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/screens/bottom_navigation.dart';
 import 'package:mobile/screens/payment_successful_screen.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/models/parking_session_model.dart';
+import 'package:intl/intl.dart';
 
-class ActiveParkingSessionScreen extends StatelessWidget {
+class ActiveParkingSessionScreen extends StatefulWidget {
   const ActiveParkingSessionScreen({super.key});
+
+  @override
+  State<ActiveParkingSessionScreen> createState() => _ActiveParkingSessionScreenState();
+}
+
+class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen> {
+  final AuthService _authService = AuthService();
+  final ParkingService _parkingService = ParkingService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 16),
-              _buildTicketCard(),
-              const SizedBox(height: 16),
-              _buildDurationCard(),
-              const SizedBox(height: 20),
-              _buildExitButton(context),
-            ],
-          ),
-        ),
+        child: _authService.currentUser == null 
+            ? const Center(child: Text('Not logged in'))
+            : StreamBuilder<List<ParkingSessionModel>>(
+                stream: _parkingService.getUserActiveSessions(_authService.currentUser!.uid),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return ListView(
+                      children: [
+                        _buildHeader(context),
+                        const SizedBox(height: 60),
+                        const Center(child: Text('No active parking session found.', style: TextStyle(fontSize: 16))),
+                      ]
+                    );
+                  }
+
+                  final session = snapshot.data!.first;
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Column(
+                      children: [
+                        _buildHeader(context),
+                        const SizedBox(height: 16),
+                        _buildTicketCard(session),
+                        const SizedBox(height: 16),
+                        _buildDurationCard(session.entryTime),
+                        const SizedBox(height: 20),
+                        _buildExitButton(context, session),
+                      ],
+                    ),
+                  );
+                },
+            ),
       ),
     );
   }
@@ -70,7 +104,7 @@ class ActiveParkingSessionScreen extends StatelessWidget {
   }
 
   // ---------------- TICKET CARD ----------------
-  Widget _buildTicketCard() {
+  Widget _buildTicketCard(ParkingSessionModel session) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Card(
@@ -87,12 +121,12 @@ class ActiveParkingSessionScreen extends StatelessWidget {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('User ID', style: TextStyle(color: Colors.white70)),
-                  SizedBox(height: 6),
+                children: [
+                  const Text('User ID', style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 6),
                   Text(
-                    'USR-2024-8472',
-                    style: TextStyle(
+                    session.userId.length > 8 ? 'USR-${session.userId.substring(0, 8)}' : session.userId,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -105,16 +139,16 @@ class ActiveParkingSessionScreen extends StatelessWidget {
             _infoRow(
               icon: Icons.calendar_today,
               title: 'Entry Date',
-              value: 'Dec 7, 2025',
+              value: DateFormat('MMM d, yyyy').format(session.entryTime),
               icon2: Icons.access_time,
               title2: 'Entry Time',
-              value2: '10:45 AM',
+              value2: DateFormat('h:mm a').format(session.entryTime),
             ),
             const Divider(height: 1),
             _singleInfo(
               icon: Icons.confirmation_number,
               title: 'Ticket Number',
-              value: 'TKT-2025-120478',
+              value: session.ticketNumber,
             ),
             const Divider(height: 1),
             Padding(
@@ -189,7 +223,12 @@ class ActiveParkingSessionScreen extends StatelessWidget {
   }
 
   // ---------------- DURATION CARD ----------------
-  Widget _buildDurationCard() {
+  Widget _buildDurationCard(DateTime entryTime) {
+    final diff = DateTime.now().difference(entryTime);
+    final hours = diff.inHours.toString().padLeft(2, '0');
+    final minutes = (diff.inMinutes % 60).toString().padLeft(2, '0');
+    // Using seconds as static '00' or similar because updating real-time requires a ticker.
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -207,10 +246,10 @@ class ActiveParkingSessionScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: const [
-                _TimeBox('00', 'Hours'),
-                _TimeBox('02', 'Minutes'),
-                _TimeBox('31', 'Seconds'),
+              children: [
+                _TimeBox(hours, 'Hours'),
+                _TimeBox(minutes, 'Minutes'),
+                const _TimeBox('--', 'Seconds'), // Static for simplicity without Ticker
               ],
             ),
           ],
@@ -219,28 +258,44 @@ class ActiveParkingSessionScreen extends StatelessWidget {
     );
   }
 
+  bool _isExiting = false;
+
   // ---------------- EXIT BUTTON ----------------
-  Widget _buildExitButton(BuildContext context) {
+  Widget _buildExitButton(BuildContext context, ParkingSessionModel session) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: SizedBox(
         width: double.infinity,
         height: 54,
         child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PaymentSuccessfulScreen()),
-            );
+          onPressed: _isExiting ? null : () async {
+            setState(() => _isExiting = true);
+            try {
+              await _parkingService.endSession(session.sessionId, 'user_exit_scan', 'PAID');
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PaymentSuccessfulScreen()),
+                );
+              }
+            } catch (e) {
+               if (mounted) {
+                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to exit: $e'), backgroundColor: Colors.red));
+               }
+            } finally {
+               if (mounted) setState(() => _isExiting = false);
+            }
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           ),
-          child: const Text(
-            'Proceed to Exit',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-          ),
+          child: _isExiting 
+              ? const CircularProgressIndicator(color: Colors.white)
+              : const Text(
+                  'Simulate Exit & Pay',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
+                ),
         ),
       ),
     );

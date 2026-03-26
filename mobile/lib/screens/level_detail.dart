@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/models/zone_model.dart';
+import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/models/parking_slot.dart';
 
 class LevelDetailScreen extends StatefulWidget {
   final String levelName;
@@ -14,6 +16,8 @@ class LevelDetailScreen extends StatefulWidget {
 class _LevelDetailScreenState extends State<LevelDetailScreen> {
   int currentZoneIndex = 0;
   String selectedVehicleType = 'car'; // default selected
+  final ParkingService _parkingService = ParkingService();
+  List<ParkingSlotModel> _fbSlots = [];
 
   // Filter zones dynamically based on selected vehicle type
   List<Map<String, dynamic>> get filteredZones {
@@ -51,35 +55,52 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
     return List<Map<String, dynamic>>.from(currentZone['slots'] ?? []);
   }
 
-  // Update _countAvailable to filter slots by selected type
+  // Update _countAvailable to use merged fb data
   int _countAvailable(String type) {
     int count = 0;
     for (var zone in zones.firstWhere((l) => l['level'] == widget.levelName)['zones']) {
-      // apply parking rules
       if (type == 'bike' || type == '3wheel') {
         if (!(zone['name'] == 'Zone B' || zone['name'] == 'Zone C')) continue;
       }
-      count +=
-          (zone['slots'] as List).where((s) => s['type'] == type && s['available'] == true).length;
+      
+      final slots = (zone['slots'] as List).map((s) => s as Map<String, dynamic>);
+      for (var slot in slots) {
+        if (slot['type'] == type) {
+          final isAvail = _fbSlots.where((fs) => fs.slotNumber == slot['id']).firstOrNull?.status == 'AVAILABLE' || slot['available'];
+          if (isAvail) count++;
+        }
+      }
     }
     return count;
   }
 
   @override
   Widget build(BuildContext context) {
+    int levelInt = 1;
+    if (widget.levelName.contains('1')) levelInt = 1;
+    if (widget.levelName.contains('2')) levelInt = 2;
+    if (widget.levelName.contains('3')) levelInt = 3;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            _zoneSelector(),
-            const SizedBox(height: 16),
-            _buildParkingLayout(),
-            const SizedBox(height: 16),
-            _buildLegend(),
-            const SizedBox(height: 24),
-          ],
+        child: StreamBuilder<List<ParkingSlotModel>>(
+          stream: _parkingService.getSlotsByLevel(levelInt),
+          builder: (context, snapshot) {
+            _fbSlots = snapshot.data ?? [];
+
+            return Column(
+              children: [
+                _buildHeader(context),
+                _zoneSelector(),
+                const SizedBox(height: 16),
+                _buildParkingLayout(),
+                const SizedBox(height: 16),
+                _buildLegend(),
+                const SizedBox(height: 24),
+              ],
+            );
+          }
         ),
       ),
     );
@@ -279,8 +300,20 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
 
   // ---------------- PARKING GRID ----------------
   Widget _buildParkingLayout() {
-    final left = currentSlots.take(5).toList();
-    final right = currentSlots.skip(5).toList();
+    // Merge Firebase data into currentSlots
+    final mergedSlots = currentSlots.map((slot) {
+      final fbMatch = _fbSlots.where((fs) => fs.slotNumber == slot['id']).firstOrNull;
+      if (fbMatch != null) {
+        return {
+          ...slot,
+          'available': fbMatch.status == 'AVAILABLE',
+        };
+      }
+      return slot;
+    }).toList();
+
+    final left = mergedSlots.take(5).toList();
+    final right = mergedSlots.skip(5).toList();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),

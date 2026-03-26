@@ -4,6 +4,11 @@ import 'package:mobile/screens/add_vehicle_screen.dart';
 import 'package:mobile/screens/change_password_screen.dart';
 import 'package:mobile/screens/login_screen.dart';
 import 'package:mobile/screens/view_rates_screen.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/services/user_service.dart';
+import 'package:mobile/services/vehicle_service.dart';
+import 'package:mobile/models/user_model.dart';
+import 'package:mobile/models/vehicle_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,22 +18,18 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final List<Map<String, dynamic>> _vehicles = [
-    {
-      'plateNumber': 'ABC-1234',
-      'type': 'Car',
-      'isPrimary': true,
-      'icon': Icons.directions_car,
-    },
-    {
-      'plateNumber': 'XYZ-5678',
-      'type': 'Bike',
-      'isPrimary': false,
-      'icon': Icons.motorcycle,
-    },
-  ];
+  final AuthService _authService = AuthService();
+  final UserService _userService = UserService();
+  final VehicleService _vehicleService = VehicleService();
 
-  void _deleteVehicle(String plateNumber) {
+  IconData _getVehicleIcon(String type) {
+    if (type.toLowerCase().contains('bike') || type.toLowerCase().contains('motorcycle')) {
+      return Icons.motorcycle;
+    }
+    return Icons.directions_car;
+  }
+
+  void _deleteVehicle(String vehicleId, String plateNumber) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -40,14 +41,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              setState(() {
-                _vehicles.removeWhere((v) => v['plateNumber'] == plateNumber);
-              });
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Vehicle deleted successfully'), backgroundColor: Colors.red),
-              );
+              try {
+                await _vehicleService.deleteVehicle(vehicleId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Vehicle deleted successfully'), backgroundColor: Colors.red),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
@@ -60,16 +69,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      body: Column(
-        children: [
-          _buildHeader(),
+      body: FutureBuilder<UserModel?>(
+        future: _authService.currentUser != null ? _userService.getUserProfile(_authService.currentUser!.uid) : Future.value(null),
+        builder: (context, userSnapshot) {
+          final user = userSnapshot.data;
+          
+          return Column(
+            children: [
+              _buildHeader(user),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
                   _buildSectionTitle('Personal Information'),
-                  _buildPersonalInfoCard(),
+                  _buildPersonalInfoCard(user),
                   const SizedBox(height: 24),
 
                   _buildSectionHeader('My Vehicles', '+ Add', () {
@@ -79,19 +93,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     );
                   }),
 
-                  ..._vehicles.map((v) => Column(
-                        children: [
-                          _buildVehicleCard(
-                            context,
-                            v['plateNumber'],
-                            v['type'],
-                            isPrimary: v['isPrimary'],
-                            icon: v['icon'],
-                            onDelete: () => _deleteVehicle(v['plateNumber']),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                      )),
+                  if (_authService.currentUser != null)
+                    StreamBuilder<List<VehicleModel>>(
+                      stream: _vehicleService.getUserVehicles(_authService.currentUser!.uid),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return const Text('No vehicles added yet.');
+                        }
+                        return Column(
+                          children: snapshot.data!.map((v) => Column(
+                            children: [
+                              _buildVehicleCard(
+                                context,
+                                v.vehicleId,
+                                v.vehiclePlateNo,
+                                v.vehicleType,
+                                isPrimary: v.isPrimary,
+                                icon: _getVehicleIcon(v.vehicleType),
+                                onDelete: () => _deleteVehicle(v.vehicleId, v.vehiclePlateNo),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          )).toList(),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 24),
                   _buildSectionTitle('Settings'),
                   _buildSettingsCard(context),
@@ -103,11 +132,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
+      );
+    },
+  ),
+);
+}
 
-  Widget _buildHeader() {
+Widget _buildHeader(UserModel? user) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
       decoration: BoxDecoration(
@@ -138,13 +169,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
-                'John Doe',
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                user?.name ?? 'Loading...',
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
-              Text('USR-2024-8472', style: TextStyle(color: Colors.white70, fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(user?.userId != null ? 'ID: ${user!.userId.substring(0, 8)}...' : '', 
+                   style: const TextStyle(color: Colors.white70, fontSize: 14)),
             ],
           ),
         ],
@@ -189,7 +221,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPersonalInfoCard() {
+  Widget _buildPersonalInfoCard(UserModel? user) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -197,9 +229,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            _buildInfoRow(Icons.email, 'Email', 'john.doe@example.com'),
+            _buildInfoRow(Icons.email, 'Email', user?.email ?? 'Loading...'),
             const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(height: 1)),
-            _buildInfoRow(Icons.phone, 'Phone', '+1 234 567 8900'),
+            _buildInfoRow(Icons.phone, 'Phone', user?.phoneNumber ?? 'Loading...'),
           ],
         ),
       ),
@@ -242,6 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildVehicleCard(
     BuildContext context,
+    String vehicleId,
     String plateNumber,
     String type, {
     required bool isPrimary,
@@ -316,6 +349,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 MaterialPageRoute(
                   builder:
                       (context) => AddVehicleScreen(
+                        vehicleId: vehicleId,
                         plateNumber: plateNumber,
                         vehicleType: type,
                         isPrimary: isPrimary,
@@ -403,12 +437,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       height: 54,
       child: OutlinedButton.icon(
-        onPressed: () {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const SignInScreen()),
-            (route) => false,
-          );
+        onPressed: () async {
+          await _authService.signOut();
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const SignInScreen()),
+              (route) => false,
+            );
+          }
         },
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/services/vehicle_service.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/models/vehicle_model.dart';
 
 class AddVehicleScreen extends StatefulWidget {
+  final String? vehicleId;
   final String? vehicleType;
   final String? plateNumber;
   final bool isPrimary;
 
-  const AddVehicleScreen({super.key, this.vehicleType, this.plateNumber, this.isPrimary = false});
+  const AddVehicleScreen({super.key, this.vehicleId, this.vehicleType, this.plateNumber, this.isPrimary = false});
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
@@ -15,9 +19,12 @@ class AddVehicleScreen extends StatefulWidget {
 class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final TextEditingController plateController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final VehicleService _vehicleService = VehicleService();
+  final AuthService _authService = AuthService();
 
   bool isPrimary = true;
   String? selectedVehicleType;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -197,15 +204,53 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
                 // Add Vehicle button
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: _isLoading ? null : () async {
                     if (_formKey.currentState!.validate()) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(widget.plateNumber != null ? 'Vehicle Updated' : 'Vehicle Added'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                      setState(() => _isLoading = true);
+                      try {
+                        final user = _authService.currentUser;
+                        if (user == null) throw Exception('No user logged in');
+
+                        if (widget.vehicleId != null) {
+                          // Update existing
+                          await _vehicleService.updateVehicle(widget.vehicleId!, {
+                            'vehiclePlateNo': plateController.text.trim(),
+                            'vehicleType': selectedVehicleType,
+                            'isPrimary': isPrimary,
+                            'userId': user.uid,
+                          });
+                        } else {
+                          // Add new
+                          VehicleModel newVehicle = VehicleModel(
+                            vehicleId: '',
+                            userId: user.uid,
+                            vehicleType: selectedVehicleType ?? 'Car',
+                            vehiclePlateNo: plateController.text.trim(),
+                            isPrimary: isPrimary,
+                            registrationDate: DateTime.now(),
+                            isActive: true,
+                          );
+                          await _vehicleService.addVehicle(newVehicle);
+                        }
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(widget.vehicleId != null ? 'Vehicle Updated' : 'Vehicle Added'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                        }
+                      } catch (e) {
+                         if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                            );
+                         }
+                      } finally {
+                        if (mounted) setState(() => _isLoading = false);
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -214,10 +259,12 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                   ),
-                  child: Text(
-                    widget.plateNumber != null ? 'Update Vehicle' : 'Add Vehicle',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: _isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          widget.vehicleId != null ? 'Update Vehicle' : 'Add Vehicle',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                 ),
 
                 const SizedBox(height: 16),
@@ -279,8 +326,6 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
       ),
-      // reduce vertical padding to allow tighter layouts and avoid hitting
-      // the InputDecorator's minimum height constraint in narrow spaces
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
   }

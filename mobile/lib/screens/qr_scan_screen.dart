@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/screens/active_parking_session_screen.dart';
 
 class QrScanScreen extends StatelessWidget {
   const QrScanScreen({super.key});
@@ -58,7 +61,8 @@ class QrScanScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
+                  const SizedBox(height: 6),
+                  const Text(
                     'Position the QR code within the frame',
                     style: TextStyle(
                       color: Colors.white70,
@@ -66,6 +70,21 @@ class QrScanScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            Positioned(
+              bottom: 40,
+              left: 40,
+              right: 40,
+              child: ElevatedButton(
+                onPressed: () => _simulateScan(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text('Simulate Scan Entry QR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -137,5 +156,27 @@ class QrScanScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _simulateScan(BuildContext context) async {
+    final AuthService _authService = AuthService();
+    final ParkingService _parkingService = ParkingService();
+
+    try {
+      final user = _authService.currentUser;
+      if (user != null) {
+        // Mocking a slot scan
+        await _parkingService.createSession(user.uid, 'slot_demo_1', 'user');
+        if (context.mounted) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ActiveParkingSessionScreen()));
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not logged in.'), backgroundColor: Colors.red));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Scan Error: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 }
