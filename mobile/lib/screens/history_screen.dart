@@ -11,32 +11,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   String _selectedFilter = 'All';
 
-  final List<Map<String, dynamic>> _historyData = [
-    {
-      'ticketId': 'TKT-2025-120478',
-      'date': 'Dec 7, 2025',
-      'time': '10:45 AM - 12:47 PM',
-      'duration': '2h 2m',
-      'amount': 9.00,
-      'status': 'PAID',
-    },
-    {
-      'ticketId': 'TKT-2025-120401',
-      'date': 'Dec 6, 2025',
-      'time': '3:20 PM - 5:15 PM',
-      'duration': '1h 55m',
-      'amount': 8.50,
-      'status': 'PAID',
-    },
-    {
-      'ticketId': 'TKT-2025-120356',
-      'date': 'Dec 5, 2025',
-      'time': '9:00 AM - 12:30 PM',
-      'duration': '3h 30m',
-      'amount': 14.00,
-      'status': 'PAID',
-    },
-  ];
+  final List<Map<String, dynamic>> _historyData = [];
 
   List<Map<String, dynamic>> get _filteredData {
     if (_selectedFilter == 'All') return _historyData;
@@ -63,16 +38,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _buildFilters(),
           const SizedBox(height: 16),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filteredData.length,
-              itemBuilder: (context, index) {
-                final item = _filteredData[index];
-                return _buildHistoryCard(item);
-              },
-            ),
+            child: _filteredData.isEmpty
+                ? _buildEmptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _filteredData.length,
+                    itemBuilder: (context, index) {
+                      final item = _filteredData[index];
+                      return _buildHistoryCard(item);
+                    },
+                  ),
           ),
-          _buildSummary(),
+          if (_filteredData.isNotEmpty) _buildSummary(),
           const SizedBox(height: 16),
         ],
       ),
@@ -140,6 +117,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
           label,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.local_parking_rounded,
+            size: 80,
+            color: Colors.grey.shade300,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No parking sessions yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2C3E50),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Your parking history will appear here\nonce you start parking.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+        ],
       ),
     );
   }
