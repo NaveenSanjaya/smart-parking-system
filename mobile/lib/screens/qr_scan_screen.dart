@@ -159,14 +159,14 @@ class QrScanScreen extends StatelessWidget {
   }
 
   Future<void> _simulateScan(BuildContext context) async {
-    final AuthService _authService = AuthService();
-    final ParkingService _parkingService = ParkingService();
+    final AuthService authService = AuthService();
+    final ParkingService parkingService = ParkingService();
 
     try {
-      final user = _authService.currentUser;
+      final user = authService.currentUser;
       if (user != null) {
         // Mocking a slot scan
-        await _parkingService.createSession(user.uid, 'slot_demo_1', 'user');
+        await parkingService.createSession(user.uid, 'slot_demo_1', 'user');
         if (context.mounted) {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ActiveParkingSessionScreen()));
         }

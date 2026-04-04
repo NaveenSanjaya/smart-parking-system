@@ -1,10 +1,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/models/user_model.dart';
 import 'package:mobile/screens/level_detail.dart';
 import 'package:mobile/screens/qr_scan_screen.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/services/user_service.dart';
 import 'package:mobile/models/parking_slot.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -17,15 +19,23 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
   final ParkingService _parkingService = ParkingService();
+  final UserService _userService = UserService();
+
+  UserModel? _userProfile;
 
   @override
   void initState() {
     super.initState();
+    _loadUserProfile();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  Future<void> _loadUserProfile() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final profile = await _userService.getUserProfile(uid);
+      if (mounted) setState(() => _userProfile = profile);
+    } catch (_) {}
   }
 
   @override
@@ -47,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: FloatingActionButton.extended(
           onPressed: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const QrScanScreen()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const QrScanScreen()),
+            );
           },
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -63,12 +76,18 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, snapshot) {
             final slots = snapshot.data ?? [];
             final levels = [1, 2, 3].map((l) {
-               final levelSlots = slots.where((s) => s.levelNumber == l);
-               final available = levelSlots.where((s) => s.status == 'AVAILABLE').length;
-               return {'level': 'Level $l', 'available': available, 'total': levelSlots.isEmpty ? 100 : levelSlots.length};
+              final levelSlots = slots.where((s) => s.levelNumber == l);
+              final available =
+                  levelSlots.where((s) => s.status == 'AVAILABLE').length;
+              return {
+                'level': 'Level $l',
+                'available': available,
+                'total': levelSlots.isEmpty ? 100 : levelSlots.length,
+              };
             }).toList();
 
-            final totalAvailable = levels.fold<int>(0, (sum, l) => sum + (l['available'] as int));
+            final totalAvailable = levels.fold<int>(
+                0, (sum, l) => sum + (l['available'] as int));
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -90,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             );
-          }
+          },
         ),
       ),
     );
@@ -99,6 +118,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // ---------------- UI Components ----------------
 
   Widget _buildHeaderCard(String totalAvailable) {
+    final displayName = _userProfile?.name ?? 
+        (_authService.currentUser?.uid != null
+            ? 'USR-${_authService.currentUser!.uid.substring(0, 8)}'
+            : 'Loading...');
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -116,11 +140,32 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('User ID', style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 4),
-          Text(
-             _authService.currentUser?.uid.length != null ? 'USR-${_authService.currentUser!.uid.substring(0, 8)}' : 'Loading...',
-             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_outline, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Welcome back', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    displayName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           Container(
@@ -133,7 +178,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Column(
               children: [
-                const Text('Available Parking Slots', style: TextStyle(color: Colors.white70)),
+                const Text(
+                  'Available Parking Slots',
+                  style: TextStyle(color: Colors.white70),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   totalAvailable,
@@ -145,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Updated dynamically',
+                  'Updated in real-time',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
@@ -157,17 +205,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildParkingLevelCard(Map<String, dynamic> level) {
-    final double progress = level['available'] / level['total'];
+    final int total = level['total'] as int;
+    final int available = level['available'] as int;
+    final double progress = total > 0 ? available / total : 0;
 
     return GestureDetector(
       onTap: () {
-        // Pass the correct levelName to LevelDetailScreen
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => LevelDetailScreen(levelName: level['level'])),
+          MaterialPageRoute(
+            builder: (_) => LevelDetailScreen(levelName: level['level']),
+          ),
         );
       },
-
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(16),
@@ -189,14 +239,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: const BoxDecoration(color: AppColors.teal, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: AppColors.teal,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.directions_car, color: Colors.white),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(level['level'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                  child: Text(
+                    level['level'],
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-                Text('${level['available']} / ${level['total']}'),
+                Text('$available / $total'),
               ],
             ),
             const SizedBox(height: 12),
@@ -206,7 +262,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 value: progress,
                 minHeight: 8,
                 backgroundColor: const Color(0xFFE5E1E6),
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
+                valueColor:
+                    const AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
               ),
             ),
           ],

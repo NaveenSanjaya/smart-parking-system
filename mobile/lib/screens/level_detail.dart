@@ -259,7 +259,7 @@ class _LevelDetailScreenState extends State<LevelDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${zone['slots'].where((s) => s['available'] == true).length} slots available',
+                  '${((zone['slots'] as List?) ?? []).where((s) => s['available'] == true).length} slots available',
                   style: const TextStyle(fontSize: 13, color: Color.fromARGB(255, 112, 112, 112)),
                 ),
               ],

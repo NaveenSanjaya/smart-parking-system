@@ -106,10 +106,10 @@
 
     <div class="sidebar-footer">
         <div class="user-profile">
-            <div class="avatar">AD</div>
+            <div class="avatar">{{ userInitial }}</div>
             <div class="user-details">
-                <span class="user-name">Admin User</span>
-                <span class="user-email">admin&#64;smartpark.com</span>
+                <span class="user-name">{{ userName }}</span>
+                <span class="user-email">{{ userEmail }}</span>
             </div>
         </div>
         <a href="#" class="sign-out" (click)="signOut($event)">

@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -16,8 +17,11 @@ export class LoginComponent {
   password = '';
   emailError = '';
   passwordError = '';
+  loginError = '';
+  isLoading = false;
   
   private router = inject(Router);
+  private authService = inject(AuthService);
 
   togglePasswordVisibility(): void {
     this.passwordVisible = !this.passwordVisible;
@@ -28,10 +32,11 @@ export class LoginComponent {
     return re.test(email);
   }
 
-  onLogin(event: Event): void {
+  async onLogin(event: Event): Promise<void> {
     event.preventDefault();
     this.emailError = '';
     this.passwordError = '';
+    this.loginError = '';
     
     let isValid = true;
     
@@ -49,7 +54,46 @@ export class LoginComponent {
     }
     
     if (isValid) {
-      this.router.navigate(['/dashboard']);
+      this.isLoading = true;
+      try {
+        const result = await this.authService.login(this.email, this.password);
+        if (result.success) {
+          this.router.navigate(['/dashboard']);
+        } else {
+          this.loginError = result.message || 'Login failed. Please try again.';
+        }
+      } catch (error) {
+        this.loginError = 'An unexpected error occurred. Please try again.';
+      } finally {
+        this.isLoading = false;
+      }
+    }
+  }
+
+  async forgotPassword(event: Event): Promise<void> {
+    event.preventDefault();
+    this.emailError = '';
+    this.loginError = '';
+
+    if (!this.email) {
+      this.emailError = 'Please enter your email address above to reset your password.';
+      return;
+    }
+
+    if (!this.validateEmail(this.email)) {
+      this.emailError = 'Please enter a valid email address.';
+      return;
+    }
+
+    try {
+      await this.authService.resetPassword(this.email);
+      alert('A password reset link has been sent to your email address.');
+    } catch (error: any) {
+      if (error.code === 'auth/user-not-found') {
+        this.loginError = 'No account found with this email address.';
+      } else {
+        this.loginError = 'Failed to send password reset email. Please try again.';
+      }
     }
   }
 }

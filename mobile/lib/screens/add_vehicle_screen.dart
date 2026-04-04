@@ -86,7 +86,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 // Vehicle Type
                 _buildLabel('Vehicle Type'),
                 DropdownButtonFormField<String>(
-                  value: selectedVehicleType,
+                  initialValue: selectedVehicleType,
                   validator: (value) => value == null ? 'Please select a vehicle type' : null,
                   decoration: InputDecoration(
                     isDense: true,
@@ -173,7 +173,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       ),
                       Switch(
                         value: isPrimary,
-                        activeColor: AppColors.primaryColor,
+                        activeThumbColor: AppColors.primaryColor,
                         onChanged: (value) {
                           setState(() {
                             isPrimary = value;

@@ -169,9 +169,31 @@
 
     .map-grid {
       display: flex;
-      flex-direction: column;
-      gap: 20px;
-      align-items: center;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 40px;
+      align-items: flex-start;
+      width: 100%;
+
+      &.compact-mode {
+        gap: 20px;
+        .zone-wrapper {
+          min-width: 250px;
+          max-width: 320px;
+          .zone-title { font-size: 11px; }
+          .zone-box {
+            padding: 15px 20px;
+            gap: 20px;
+            .col { gap: 8px; }
+            .slot {
+              gap: 8px;
+              .slot-id { width: 20px; font-size: 10px; }
+              .slot-visual { width: 36px; height: 18px; }
+            }
+          }
+        }
+      }
 
       .map-row {
         display: flex;
@@ -192,17 +214,20 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    flex: 1;
+    min-width: 320px;
+    max-width: 600px;
     
     &.relative {
       position: relative;
     }
 
     .zone-title {
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 600;
       color: #0f172a;
       background: white;
-      padding: 0 8px;
+      padding: 0 12px;
       z-index: 10;
       margin-bottom: -16px; /* overlaps the border */
     }
@@ -210,9 +235,12 @@
     .zone-box {
       border: 1px dashed #cbd5e1;
       border-radius: 16px;
-      padding: 20px 12px;
+      padding: 30px 40px;
       display: flex;
-      gap: 32px; /* Drive aisle gap */
+      justify-content: space-around;
+      width: 100%;
+      box-sizing: border-box;
+      gap: 40px; /* Drive aisle gap */
       background: #fafafb;
       position: relative;
 
@@ -224,24 +252,31 @@
         .slot {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 16px;
 
           .slot-id {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 600;
             color: #475569;
-            width: 16px;
+            width: 28px;
             text-align: center;
           }
 
           .slot-visual {
-            width: 44px;
-            height: 24px;
+            width: 56px;
+            height: 32px;
             border-radius: 4px;
             box-sizing: border-box;
           }
 
           /* Slot states */
+          &.maintenance {
+            .slot-visual {
+              border: 1px solid #d97706;
+              background: repeating-linear-gradient(45deg, #fcd34d, #fcd34d 8px, #f59e0b 8px, #f59e0b 16px);
+            }
+          }
+
           &.empty {
             .slot-visual {
               border: 1px solid #e2e8f0;
@@ -296,6 +331,21 @@
                 position: absolute;
                 top: 4px; left: 4px; width: 14px; bottom: 4px;
                 border: 1px solid #e2e8f0;
+                border-radius: 2px;
+              }
+            }
+          }
+
+          &.filled-3wheel {
+            .slot-visual {
+              border: 1px solid #0f172a;
+              background: #1e293b;
+              position: relative;
+              &:after {
+                content: '';
+                position: absolute;
+                top: 4px; left: 4px; width: 14px; bottom: 4px;
+                background: #334155;
                 border-radius: 2px;
               }
             }

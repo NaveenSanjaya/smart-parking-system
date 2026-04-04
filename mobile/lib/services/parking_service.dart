@@ -102,4 +102,17 @@ class ParkingService {
             .map((doc) => ParkingSessionModel.fromJson(doc.data(), doc.id))
             .toList());
   }
+
+  // Get User's Session History (completed sessions, ordered by most recent)
+  Stream<List<ParkingSessionModel>> getUserSessionHistory(String userId) {
+    return _firestore
+        .collection('parking_sessions')
+        .where('userId', isEqualTo: userId)
+        .where('exitTime', isNull: false)
+        .orderBy('entryTime', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ParkingSessionModel.fromJson(doc.data(), doc.id))
+            .toList());
+  }
 }

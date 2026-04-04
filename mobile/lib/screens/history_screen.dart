@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
+import 'package:mobile/models/parking_session_model.dart';
+import 'package:mobile/models/pricing_rate_model.dart';
+import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/services/parking_service.dart';
+import 'package:mobile/services/pricing_service.dart';
+import 'package:intl/intl.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -9,26 +15,67 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
+  final AuthService _authService = AuthService();
+  final ParkingService _parkingService = ParkingService();
+  final PricingService _pricingService = PricingService();
+
   String _selectedFilter = 'All';
+  PricingRateModel? _currentRate;
 
-  final List<Map<String, dynamic>> _historyData = [];
+  @override
+  void initState() {
+    super.initState();
+    _loadPricingRate();
+  }
 
-  List<Map<String, dynamic>> get _filteredData {
-    if (_selectedFilter == 'All') return _historyData;
-    if (_selectedFilter == 'This Week') {
-      return _historyData.where((d) => d['date'].contains('Dec 7') || d['date'].contains('Dec 6')).toList();
+  Future<void> _loadPricingRate() async {
+    try {
+      final rate = await _pricingService.getCurrentPricingRate();
+      if (mounted) setState(() => _currentRate = rate);
+    } catch (_) {}
+  }
+
+  List<ParkingSessionModel> _applyFilter(List<ParkingSessionModel> sessions) {
+    final now = DateTime.now();
+    switch (_selectedFilter) {
+      case 'This Week':
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        return sessions
+            .where((s) => s.entryTime.isAfter(
+                DateTime(weekStart.year, weekStart.month, weekStart.day)))
+            .toList();
+      case 'This Month':
+        return sessions
+            .where((s) =>
+                s.entryTime.year == now.year && s.entryTime.month == now.month)
+            .toList();
+      case 'This Year':
+        return sessions
+            .where((s) => s.entryTime.year == now.year)
+            .toList();
+      default:
+        return sessions;
     }
-    if (_selectedFilter == 'This Month') {
-      return _historyData.where((d) => d['date'].contains('Dec')).toList();
-    }
-    if (_selectedFilter == 'This Year') {
-      return _historyData.where((d) => d['date'].contains('2025')).toList();
-    }
-    return _historyData;
+  }
+
+  String _formatDuration(DateTime entry, DateTime exit) {
+    final diff = exit.difference(entry);
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    if (h > 0) return '${h}h ${m}m';
+    return '${m}m';
+  }
+
+  double _calculateAmount(DateTime entry, DateTime exit) {
+    final hourlyRate = _currentRate?.hourlyRate ?? 4.0;
+    final hours = exit.difference(entry).inMinutes / 60.0;
+    return double.parse((hours * hourlyRate).toStringAsFixed(2));
   }
 
   @override
   Widget build(BuildContext context) {
+    final userId = _authService.currentUser?.uid;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       body: Column(
@@ -38,18 +85,32 @@ class _HistoryScreenState extends State<HistoryScreen> {
           _buildFilters(),
           const SizedBox(height: 16),
           Expanded(
-            child: _filteredData.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _filteredData.length,
-                    itemBuilder: (context, index) {
-                      final item = _filteredData[index];
-                      return _buildHistoryCard(item);
+            child: userId == null
+                ? const Center(child: Text('Not logged in'))
+                : StreamBuilder<List<ParkingSessionModel>>(
+                    stream: _parkingService.getUserSessionHistory(userId),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+
+                      final allSessions = snapshot.data ?? [];
+                      final filtered = _applyFilter(allSessions);
+
+                      if (filtered.isEmpty) return _buildEmptyState();
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) =>
+                            _buildHistoryCard(filtered[index]),
+                      );
                     },
                   ),
           ),
-          if (_filteredData.isNotEmpty) _buildSummary(),
           const SizedBox(height: 16),
         ],
       ),
@@ -102,11 +163,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _buildFilterChip(String label) {
     final isSelected = _selectedFilter == label;
     return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedFilter = label;
-        });
-      },
+      onTap: () => setState(() => _selectedFilter = label),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         decoration: BoxDecoration(
@@ -126,19 +183,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.local_parking_rounded,
-            size: 80,
-            color: Colors.grey.shade300,
-          ),
+          Icon(Icons.local_parking_rounded, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
           const Text(
             'No parking sessions yet',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2C3E50),
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -151,7 +200,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildHistoryCard(Map<String, dynamic> item) {
+  Widget _buildHistoryCard(ParkingSessionModel session) {
+    final exitTime = session.exitTime ?? DateTime.now();
+    final duration = _formatDuration(session.entryTime, exitTime);
+    final amount = _calculateAmount(session.entryTime, exitTime);
+    final isPaid = session.paymentStatus == 'PAID';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 2,
@@ -164,12 +218,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  item['ticketId'],
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
+                Expanded(
+                  child: Text(
+                    session.ticketNumber,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF2C3E50),
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
@@ -177,19 +234,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.green),
+                    border: Border.all(color: isPaid ? Colors.green : Colors.orange),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                      Icon(
+                        isPaid ? Icons.check_circle_outline : Icons.pending_outlined,
+                        size: 14,
+                        color: isPaid ? Colors.green : Colors.orange,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        item['status'],
-                        style: const TextStyle(
+                        session.paymentStatus,
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                          color: isPaid ? Colors.green : Colors.orange,
                         ),
                       ),
                     ],
@@ -203,21 +264,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 const Icon(Icons.calendar_today_outlined, size: 16, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  item['date'],
+                  DateFormat('MMM d, yyyy').format(session.entryTime),
                   style: const TextStyle(color: Color(0xFF2C3E50), fontWeight: FontWeight.w500),
                 ),
               ],
             ),
-            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildDetailItem(Icons.access_time, 'Time', item['time']),
-                _buildDetailItem(null, 'Duration', item['duration']),
+                _buildDetailItem(
+                  Icons.access_time,
+                  'Entry',
+                  DateFormat('h:mm a').format(session.entryTime),
+                ),
+                _buildDetailItem(
+                  Icons.exit_to_app,
+                  'Exit',
+                  DateFormat('h:mm a').format(exitTime),
+                ),
+                _buildDetailItem(
+                  null,
+                  'Duration',
+                  duration,
+                ),
                 _buildDetailItem(
                   Icons.attach_money,
                   'Amount',
-                  '\$${item['amount'].toStringAsFixed(2)}',
+                  '\$${amount.toStringAsFixed(2)}',
                   isAmount: true,
                 ),
               ],
@@ -228,9 +305,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildDetailItem(IconData? icon, String label, String value, {bool isAmount = false}) {
+  Widget _buildDetailItem(IconData? icon, String label, String value,
+      {bool isAmount = false}) {
     return Column(
-      crossAxisAlignment: isAmount ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment:
+          isAmount ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -245,61 +324,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF2C3E50),
+            color: Color(0xFF2C3E50),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSummary() {
-    final int totalSessions = _filteredData.length;
-    final double totalSpent = _filteredData.fold(0.0, (sum, item) => sum + item['amount']);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF007980),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total Sessions', style: TextStyle(color: Colors.white, fontSize: 16)),
-                Text(
-                  '$totalSessions',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total Spent', style: TextStyle(color: Colors.white, fontSize: 16)),
-                Text(
-                  '\$${totalSpent.toStringAsFixed(2)}',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
