@@ -8,6 +8,15 @@ import { ParkingRatesService, ParkingRate } from '../services/parking-rates.serv
 import { inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
+export interface Activity {
+  type: string;
+  title: string;
+  description: string;
+  time: string;
+  timestampMs: number;
+  iconUrl?: string;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -74,41 +83,46 @@ export class DashboardComponent implements OnInit, OnDestroy {
   };
 
   // Recent Activity Data
-  activities = [
+  activities: Activity[] = [
     {
       type: 'success',
       iconUrl: '',
       title: 'ABC-1234',
       description: 'Entered at L1-A04',
-      time: '2 mins ago'
+      time: '2 mins ago',
+      timestampMs: Date.now() - 120000
     },
     {
       type: 'info',
       iconUrl: '',
       title: 'XYZ-9876',
       description: 'Paid LKR 450.00 • 2h 15m',
-      time: '5 mins ago'
+      time: '5 mins ago',
+      timestampMs: Date.now() - 300000
     },
     {
       type: 'success',
       iconUrl: '',
       title: 'LMN-4567',
       description: 'Entered at L2-B11',
-      time: '12 mins ago'
+      time: '12 mins ago',
+      timestampMs: Date.now() - 720000
     },
     {
       type: 'error',
       iconUrl: '',
       title: 'Gate 2 Malfunction',
       description: 'Status: critical',
-      time: '15 mins ago'
+      time: '15 mins ago',
+      timestampMs: Date.now() - 900000
     },
     {
       type: 'info',
       iconUrl: '',
       title: 'JKL-3322',
       description: 'Paid LKR 200.00 • 45m',
-      time: '22 mins ago'
+      time: '22 mins ago',
+      timestampMs: Date.now() - 1320000
     }
   ];
 
@@ -136,9 +150,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const isThisWeek = (now.getTime() - sessionDate.getTime()) < (7 * 24 * 60 * 60 * 1000);
       const isThisMonth = sessionDate.getMonth() === now.getMonth() && sessionDate.getFullYear() === now.getFullYear();
 
-      if (this.activeTimeFilter === 'Today' && isToday) total += s.amount;
-      if (this.activeTimeFilter === 'Week' && isThisWeek) total += s.amount;
-      if (this.activeTimeFilter === 'Month' && isThisMonth) total += s.amount;
+      // Only count PAID sessions towards "Total Revenue" if marked by an Admin
+      if (s.status === 'PAID' && s.rawData['markerByAdmin']) {
+        if (this.activeTimeFilter === 'Today' && isToday) total += s.amount;
+        if (this.activeTimeFilter === 'Week' && isThisWeek) total += s.amount;
+        if (this.activeTimeFilter === 'Month' && isThisMonth) total += s.amount;
+      }
     });
 
     this.totalRevenue.amount = `LKR ${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -215,9 +232,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         const exitTime = data['exitTime']?.toDate ? data['exitTime'].toDate() : null;
         const status = data['paymentStatus'] || 'PENDING';
         
-        // Calculate amount
-        let amount = 0;
-        if (entryTime) {
+        // Calculate amount - use actual storage value if PAID, or estimate if PENDING
+        let amount = data['amount'] || data['totalAmount'] || 0;
+        
+        if (amount === 0 && entryTime) {
           const end = exitTime || new Date();
           const durationHrs = Math.ceil((end.getTime() - entryTime.getTime()) / 3600000);
           
@@ -238,7 +256,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private updateActivities() {
     // Generate an event for each session's entry, and an event for exit if PAID
-    const events: any[] = [];
+    const events: Activity[] = [];
     const now = new Date();
 
     this.allSessions.forEach(s => {

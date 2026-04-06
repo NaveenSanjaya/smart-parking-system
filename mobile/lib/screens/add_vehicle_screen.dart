@@ -3,6 +3,7 @@ import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/services/vehicle_service.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/models/vehicle_model.dart';
+import 'package:mobile/utils/ui_utils.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   final String? vehicleId;
@@ -86,7 +87,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 // Vehicle Type
                 _buildLabel('Vehicle Type'),
                 DropdownButtonFormField<String>(
-                  initialValue: selectedVehicleType,
+                  value: selectedVehicleType,
                   validator: (value) => value == null ? 'Please select a vehicle type' : null,
                   decoration: InputDecoration(
                     isDense: true,
@@ -173,7 +174,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       ),
                       Switch(
                         value: isPrimary,
-                        activeThumbColor: AppColors.primaryColor,
+                        thumbColor: WidgetStateProperty.resolveWith<Color>(
+                          (states) => states.contains(WidgetState.selected)
+                              ? AppColors.primaryColor
+                              : Colors.grey,
+                        ),
                         onChanged: (value) {
                           setState(() {
                             isPrimary = value;
@@ -233,21 +238,20 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                           await _vehicleService.addVehicle(newVehicle);
                         }
 
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(widget.vehicleId != null ? 'Vehicle Updated' : 'Vehicle Added'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-                        }
+                        if (!context.mounted) return;
+                        UIUtils.showSnackBar(
+                          context,
+                          widget.vehicleId != null ? 'Vehicle Updated' : 'Vehicle Added',
+                          isError: false,
+                        );
+                        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
                       } catch (e) {
-                         if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                            );
-                         }
+                         if (!context.mounted) return;
+                         UIUtils.showSnackBar(
+                           context,
+                           UIUtils.getFriendlyErrorMessage(e),
+                           isError: true,
+                         );
                       } finally {
                         if (mounted) setState(() => _isLoading = false);
                       }

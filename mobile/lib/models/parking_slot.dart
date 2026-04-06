@@ -45,4 +45,24 @@ class ParkingSlotModel {
       'sensorLastUpdate': sensorLastUpdate != null ? Timestamp.fromDate(sensorLastUpdate!) : null,
     };
   }
+
+  /// Determines the vehicle type based on the slotNumber string (e.g. "A-01")
+  /// Matches the dashboard/smart-parking logic.
+  static String getVehicleType(String slotNumber) {
+    if (slotNumber.isEmpty) return 'car';
+    final parts = slotNumber.split('-');
+    if (parts.length < 2) return 'car';
+    
+    final section = parts.first.toUpperCase();
+    final number = int.tryParse(parts.last) ?? 1;
+
+    // Logic from dashboard:
+    // Sections B, D, F: 1-5 Car, >5 Bike
+    // Sections A, C, E: 1-5 Car, >5 Three-Wheeler
+    if (['B', 'D', 'F'].contains(section)) {
+      return number <= 5 ? 'car' : 'bike';
+    } else {
+      return number <= 5 ? 'car' : 'threeWheeler';
+    }
+  }
 }

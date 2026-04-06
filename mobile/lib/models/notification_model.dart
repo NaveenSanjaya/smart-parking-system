@@ -8,6 +8,9 @@ class NotificationModel {
   final String title;
   final String message;
   final NotificationType type;
+  final String? icon;
+  final String? iconColor;
+  final String? iconBg;
   final DateTime timestamp;
   final bool isUnread;
 
@@ -17,18 +20,33 @@ class NotificationModel {
     required this.title,
     required this.message,
     required this.type,
+    this.icon,
+    this.iconColor,
+    this.iconBg,
     required this.timestamp,
     this.isUnread = true,
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> json, String documentId) {
     NotificationType parsedType = NotificationType.info;
-    if (json['notificationType'] != null) {
-      try {
-        parsedType = NotificationType.values.byName(json['notificationType'].toString().toLowerCase());
-      } catch (e) {
-        parsedType = NotificationType.info;
-      }
+    
+    // Support both 'notificationType' (legacy) and 'type' (dashboard)
+    final typeStr = (json['type'] ?? json['notificationType'] ?? '').toString().toLowerCase();
+    if (typeStr.contains('payment')) {
+      parsedType = NotificationType.payment;
+    } else if (typeStr.contains('parking')) {
+      parsedType = NotificationType.parking;
+    } else if (typeStr.contains('warning') || typeStr.contains('overdue')) {
+      parsedType = NotificationType.warning;
+    }
+
+    // Support both 'isUnread' (legacy) and 'read' (dashboard)
+    // Note: Dashboard sends 'read: false' for unread notifications
+    bool unread = true;
+    if (json.containsKey('read')) {
+      unread = !(json['read'] as bool);
+    } else if (json.containsKey('isUnread')) {
+      unread = json['isUnread'] as bool;
     }
 
     return NotificationModel(
@@ -37,8 +55,11 @@ class NotificationModel {
       title: json['title'] ?? '',
       message: json['message'] ?? '',
       type: parsedType,
+      icon: json['icon'],
+      iconColor: json['iconColor'],
+      iconBg: json['iconBg'],
       timestamp: (json['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      isUnread: json['isUnread'] ?? true,
+      isUnread: unread,
     );
   }
 
@@ -47,9 +68,12 @@ class NotificationModel {
       'userId': userId,
       'title': title,
       'message': message,
-      'notificationType': type.name,
+      'type': type.name,
+      'icon': icon,
+      'iconColor': iconColor,
+      'iconBg': iconBg,
       'timestamp': Timestamp.fromDate(timestamp),
-      'isUnread': isUnread,
+      'read': !isUnread,
     };
   }
 }

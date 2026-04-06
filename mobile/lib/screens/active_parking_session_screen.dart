@@ -2,12 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/screens/bottom_navigation.dart';
-import 'package:mobile/screens/payment_successful_screen.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/services/parking_service.dart';
-import 'package:mobile/services/pricing_service.dart';
 import 'package:mobile/models/parking_session_model.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile/screens/qr_scan_screen.dart';
 
 class ActiveParkingSessionScreen extends StatefulWidget {
   const ActiveParkingSessionScreen({super.key});
@@ -19,11 +18,22 @@ class ActiveParkingSessionScreen extends StatefulWidget {
 class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen> {
   final AuthService _authService = AuthService();
   final ParkingService _parkingService = ParkingService();
-  final PricingService _pricingService = PricingService();
 
+  late Stream<List<ParkingSessionModel>> _sessionStream;
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   DateTime? _entryTime;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = _authService.currentUser?.uid;
+    if (uid != null) {
+      _sessionStream = _parkingService.getUserActiveSessions(uid);
+    } else {
+      _sessionStream = const Stream.empty();
+    }
+  }
 
   @override
   void dispose() {
@@ -32,6 +42,7 @@ class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen>
   }
 
   void _startTimer(DateTime entryTime) {
+    if (_entryTime == entryTime && _timer != null) return;
     _entryTime = entryTime;
     _elapsed = DateTime.now().difference(entryTime);
     _timer?.cancel();
@@ -50,9 +61,9 @@ class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen>
         child: _authService.currentUser == null
             ? const Center(child: Text('Not logged in'))
             : StreamBuilder<List<ParkingSessionModel>>(
-                stream: _parkingService.getUserActiveSessions(_authService.currentUser!.uid),
+                stream: _sessionStream,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -188,25 +199,30 @@ class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen>
               value: session.ticketNumber,
             ),
             const Divider(height: 1),
+            // Removed QR code section here
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
               child: Column(
                 children: [
                   Container(
-                    height: 220,
-                    width: 220,
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.teal,
-                      borderRadius: BorderRadius.circular(20),
+                      color: Colors.blue.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
                     ),
-                    child: const Center(
-                      child: Icon(Icons.qr_code, size: 120, color: Colors.white),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Please scan the QR code displayed at the exit gate to finish your session.',
+                            style: TextStyle(color: Colors.blue, fontSize: 13, height: 1.4),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Scan this code at exit gate',
-                    style: TextStyle(color: Colors.black54),
                   ),
                 ],
               ),
@@ -299,77 +315,42 @@ class _ActiveParkingSessionScreenState extends State<ActiveParkingSessionScreen>
     );
   }
 
-  bool _isExiting = false;
-
   // ---------------- EXIT BUTTON ----------------
   Widget _buildExitButton(BuildContext context, ParkingSessionModel session) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: SizedBox(
+      child: Container(
         width: double.infinity,
-        height: 54,
-        child: ElevatedButton(
-          onPressed: _isExiting
-              ? null
-              : () async {
-                  setState(() => _isExiting = true);
-                  _timer?.cancel();
-                  try {
-                    // Fetch current pricing rate
-                    final rate = await _pricingService.getCurrentPricingRate();
-
-                    // End session in Firestore
-                    await _parkingService.endSession(
-                        session.sessionId, 'user_exit_scan', 'PAID');
-
-                    // Fetch the updated session to get the server-set exitTime
-                    if (mounted) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PaymentSuccessfulScreen(
-                            session: ParkingSessionModel(
-                              sessionId: session.sessionId,
-                              userId: session.userId,
-                              slotId: session.slotId,
-                              ticketNumber: session.ticketNumber,
-                              entryTime: session.entryTime,
-                              exitTime: DateTime.now(),
-                              entryScannedBy: session.entryScannedBy,
-                              exitScannedBy: 'user_exit_scan',
-                              paymentStatus: 'PAID',
-                              qrCodeData: session.qrCodeData,
-                            ),
-                            rate: rate,
-                          ),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    _startTimer(session.entryTime); // restart timer on failure
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to exit: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  } finally {
-                    if (mounted) setState(() => _isExiting = false);
-                  }
-                },
+        height: 60,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryColor.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: () {
+            // Simply navigate to the scan tab/page
+            // In our BottomNavigation setting, we can just switch tabs or push the scanner
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QrScanScreen()),
+            );
+          },
+          icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
+          label: const Text(
+            'Scan Exit QR at Gate',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            elevation: 0,
           ),
-          child: _isExiting
-              ? const CircularProgressIndicator(color: Colors.white)
-              : const Text(
-                  'Simulate Exit & Pay',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-                ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'package:mobile/services/user_service.dart';
 import 'package:mobile/services/vehicle_service.dart';
 import 'package:mobile/models/user_model.dart';
 import 'package:mobile/models/vehicle_model.dart';
+import 'package:mobile/utils/ui_utils.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -45,17 +46,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Navigator.pop(context);
               try {
                 await _vehicleService.deleteVehicle(vehicleId);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Vehicle deleted successfully'), backgroundColor: Colors.red),
-                  );
-                }
+                if (!context.mounted) return;
+                UIUtils.showSnackBar(
+                  context,
+                  'Vehicle deleted successfully',
+                  isError: false,
+                );
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
-                  );
-                }
+                if (!context.mounted) return;
+                UIUtils.showSnackBar(
+                  context,
+                  UIUtils.getFriendlyErrorMessage(e),
+                  isError: true,
+                );
               }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -439,13 +442,12 @@ Widget _buildHeader(UserModel? user) {
       child: OutlinedButton.icon(
         onPressed: () async {
           await _authService.signOut();
-          if (mounted) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => const SignInScreen()),
-              (route) => false,
-            );
-          }
+          if (!context.mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const SignInScreen()),
+            (route) => false,
+          );
         },
         style: OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),

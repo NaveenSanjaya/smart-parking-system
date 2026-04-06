@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/models/parking_session_model.dart';
 import 'package:mobile/models/pricing_rate_model.dart';
+import 'package:mobile/models/parking_slot.dart';
 import 'package:mobile/services/auth_service.dart';
 import 'package:mobile/services/parking_service.dart';
 import 'package:mobile/services/pricing_service.dart';
@@ -20,124 +21,139 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final PricingService _pricingService = PricingService();
 
   String _selectedFilter = 'All';
-  PricingRateModel? _currentRate;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPricingRate();
-  }
-
-  Future<void> _loadPricingRate() async {
-    try {
-      final rate = await _pricingService.getCurrentPricingRate();
-      if (mounted) setState(() => _currentRate = rate);
-    } catch (_) {}
-  }
-
-  List<ParkingSessionModel> _applyFilter(List<ParkingSessionModel> sessions) {
-    final now = DateTime.now();
-    switch (_selectedFilter) {
-      case 'This Week':
-        final weekStart = now.subtract(Duration(days: now.weekday - 1));
-        return sessions
-            .where((s) => s.entryTime.isAfter(
-                DateTime(weekStart.year, weekStart.month, weekStart.day)))
-            .toList();
-      case 'This Month':
-        return sessions
-            .where((s) =>
-                s.entryTime.year == now.year && s.entryTime.month == now.month)
-            .toList();
-      case 'This Year':
-        return sessions
-            .where((s) => s.entryTime.year == now.year)
-            .toList();
-      default:
-        return sessions;
-    }
-  }
-
-  String _formatDuration(DateTime entry, DateTime exit) {
-    final diff = exit.difference(entry);
-    final h = diff.inHours;
-    final m = diff.inMinutes % 60;
-    if (h > 0) return '${h}h ${m}m';
-    return '${m}m';
-  }
-
-  double _calculateAmount(DateTime entry, DateTime exit) {
-    final hourlyRate = _currentRate?.hourlyRate ?? 4.0;
-    final hours = exit.difference(entry).inMinutes / 60.0;
-    return double.parse((hours * hourlyRate).toStringAsFixed(2));
-  }
 
   @override
   Widget build(BuildContext context) {
     final userId = _authService.currentUser?.uid;
+    if (userId == null) {
+      return const Scaffold(body: Center(child: Text('Please login to view history')));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      body: Column(
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 16),
-          _buildFilters(),
-          const SizedBox(height: 16),
-          Expanded(
-            child: userId == null
-                ? const Center(child: Text('Not logged in'))
-                : StreamBuilder<List<ParkingSessionModel>>(
-                    stream: _parkingService.getUserSessionHistory(userId),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Error: ${snapshot.error}'));
-                      }
+      body: SafeArea(
+        child: StreamBuilder<Map<String, PricingRateModel?>>(
+          stream: _pricingService.watchAllRates(),
+          builder: (context, rateSnapshot) {
+            final rates = rateSnapshot.data ?? {};
 
-                      final allSessions = snapshot.data ?? [];
-                      final filtered = _applyFilter(allSessions);
+            return StreamBuilder<List<ParkingSlotModel>>(
+              stream: _parkingService.getAllSlots(),
+              builder: (context, slotSnapshot) {
+                final slots = slotSnapshot.data ?? [];
+                // Map slotId -> slotNumber
+                final slotMap = {for (var s in slots) s.slotId: s.slotNumber};
 
-                      if (filtered.isEmpty) return _buildEmptyState();
+                return StreamBuilder<List<ParkingSessionModel>>(
+                  stream: _parkingService.getUserSessionHistory(userId),
+                  builder: (context, sessionSnapshot) {
+                    if (sessionSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (sessionSnapshot.hasError) {
+                      return Center(child: Text('Error: ${sessionSnapshot.error}'));
+                    }
 
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) =>
-                            _buildHistoryCard(filtered[index]),
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 16),
-        ],
+                    final allSessions = sessionSnapshot.data ?? [];
+                    final filtered = _applyFilter(allSessions);
+
+                    return Column(
+                      children: [
+                        _buildHeader(allSessions, rates, slotMap),
+                        const SizedBox(height: 16),
+                        _buildFilters(),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: filtered.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemCount: filtered.length,
+                                  itemBuilder: (context, index) =>
+                                      _buildHistoryCard(filtered[index], rates, slotMap),
+                                ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(
+    List<ParkingSessionModel> sessions,
+    Map<String, PricingRateModel?> rates,
+    Map<String, String> slotMap,
+  ) {
+    double totalSpent = 0;
+    for (var s in sessions) {
+      totalSpent += _calculateAmount(s, rates, slotMap);
+    }
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       decoration: const BoxDecoration(
         gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'Parking History',
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Parking History',
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.history, color: Colors.white, size: 20),
+              ),
+            ],
           ),
-          SizedBox(height: 8),
-          Text(
-            'View your past parking sessions',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              _statBox('Total Spent', 'LKR ${totalSpent.toStringAsFixed(0)}', Icons.payments_outlined),
+              const SizedBox(width: 16),
+              _statBox('Sessions', sessions.length.toString(), Icons.local_parking),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _statBox(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white70, size: 20),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -147,35 +163,192 @@ class _HistoryScreenState extends State<HistoryScreen> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
-        children: [
-          _buildFilterChip('All'),
-          const SizedBox(width: 12),
-          _buildFilterChip('This Week'),
-          const SizedBox(width: 12),
-          _buildFilterChip('This Month'),
-          const SizedBox(width: 12),
-          _buildFilterChip('This Year'),
-        ],
+        children: ['All', 'This Week', 'This Month', 'This Year'].map(_buildFilterChip).toList(),
       ),
     );
   }
 
   Widget _buildFilterChip(String label) {
     final isSelected = _selectedFilter == label;
-    return InkWell(
-      onTap: () => setState(() => _selectedFilter = label),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0B2544) : const Color(0xFF007980),
-          borderRadius: BorderRadius.circular(25),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (val) => setState(() => _selectedFilter = label),
+        selectedColor: AppColors.primaryColor,
+        labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: FontWeight.w600),
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
       ),
     );
+  }
+
+  List<ParkingSessionModel> _applyFilter(List<ParkingSessionModel> sessions) {
+    final now = DateTime.now();
+    switch (_selectedFilter) {
+      case 'This Week':
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        return sessions.where((s) => s.entryTime.isAfter(DateTime(weekStart.year, weekStart.month, weekStart.day))).toList();
+      case 'This Month':
+        return sessions.where((s) => s.entryTime.year == now.year && s.entryTime.month == now.month).toList();
+      case 'This Year':
+        return sessions.where((s) => s.entryTime.year == now.year).toList();
+      default:
+        return sessions;
+    }
+  }
+
+  double _calculateAmount(
+    ParkingSessionModel session,
+    Map<String, PricingRateModel?> rates,
+    Map<String, String> slotMap,
+  ) {
+    final exitTime = session.exitTime ?? DateTime.now();
+    final duration = exitTime.difference(session.entryTime);
+    final hours = (duration.inMinutes / 60.0).ceil(); // Bill for each chunk
+
+    final slotNumber = slotMap[session.slotId] ?? '';
+    final vehicleType = ParkingSlotModel.getVehicleType(slotNumber);
+    final rate = rates[vehicleType];
+
+    if (rate == null) return hours * 100.0; // Fallback to mock
+
+    if (hours <= 0) return 0;
+
+    // Logic: firstHour + (additionalHours * subsequentHour)
+    double total = rate.firstHour;
+    if (hours > 1) {
+      total += (hours - 1) * rate.subsequentHour;
+    }
+
+    // Apply Daily Max if it exceeds
+    if (rate.dailyMax > 0 && total > rate.dailyMax) {
+      total = rate.dailyMax;
+    }
+
+    return total;
+  }
+
+  Widget _buildHistoryCard(ParkingSessionModel session, Map<String, PricingRateModel?> rates, Map<String, String> slotMap) {
+    final exitTime = session.exitTime ?? DateTime.now();
+    final duration = _formatDuration(session.entryTime, exitTime);
+    final amount = _calculateAmount(session, rates, slotMap);
+    final slotNumber = slotMap[session.slotId] ?? 'N/A';
+    final vehicleType = ParkingSlotModel.getVehicleType(slotNumber);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: AppColors.teal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                      child: Text(slotNumber, style: const TextStyle(color: AppColors.teal, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    _buildStatusBadge(session.paymentStatus),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildTimeCol('Entry', session.entryTime, Icons.login_rounded),
+                    const Icon(Icons.arrow_forward_ios, size: 12, color: Colors.black12),
+                    _buildTimeCol('Exit', exitTime, Icons.logout_rounded),
+                    const Spacer(),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('LKR ${amount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryColor)),
+                        Text(duration, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20))),
+            child: Row(
+              children: [
+                Icon(_getVehicleIcon(vehicleType), size: 14, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  vehicleType.toUpperCase(),
+                  style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+                const Spacer(),
+                Text('ID: ${session.ticketNumber.split('-').last}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeCol(String label, DateTime time, IconData icon) {
+    return Expanded(
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: Colors.black26),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(DateFormat('h:mm a').format(time), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(DateFormat('MMM d').format(time), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    final bool isPaid = status == 'PAID';
+    final color = isPaid ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withValues(alpha: 0.2))),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 5, height: 5, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  IconData _getVehicleIcon(String type) {
+    switch (type) {
+      case 'bike': return Icons.pedal_bike;
+      case 'threeWheeler': return Icons.electric_rickshaw;
+      default: return Icons.directions_car;
+    }
+  }
+
+  String _formatDuration(DateTime entry, DateTime exit) {
+    final diff = exit.difference(entry);
+    final h = diff.inHours;
+    final m = diff.inMinutes % 60;
+    return h > 0 ? '${h}h ${m}m' : '${m}m';
   }
 
   Widget _buildEmptyState() {
@@ -183,154 +356,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.local_parking_rounded, size: 80, color: Colors.grey.shade300),
+          Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text(
-            'No parking sessions yet',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF2C3E50)),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Your parking history will appear here\nonce you start parking.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 14),
-          ),
+          const Text('No sessions recorded', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
         ],
       ),
     );
   }
-
-  Widget _buildHistoryCard(ParkingSessionModel session) {
-    final exitTime = session.exitTime ?? DateTime.now();
-    final duration = _formatDuration(session.entryTime, exitTime);
-    final amount = _calculateAmount(session.entryTime, exitTime);
-    final isPaid = session.paymentStatus == 'PAID';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    session.ticketNumber,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: isPaid ? Colors.green : Colors.orange),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isPaid ? Icons.check_circle_outline : Icons.pending_outlined,
-                        size: 14,
-                        color: isPaid ? Colors.green : Colors.orange,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        session.paymentStatus,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: isPaid ? Colors.green : Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today_outlined, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
-                  DateFormat('MMM d, yyyy').format(session.entryTime),
-                  style: const TextStyle(color: Color(0xFF2C3E50), fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildDetailItem(
-                  Icons.access_time,
-                  'Entry',
-                  DateFormat('h:mm a').format(session.entryTime),
-                ),
-                _buildDetailItem(
-                  Icons.exit_to_app,
-                  'Exit',
-                  DateFormat('h:mm a').format(exitTime),
-                ),
-                _buildDetailItem(
-                  null,
-                  'Duration',
-                  duration,
-                ),
-                _buildDetailItem(
-                  Icons.attach_money,
-                  'Amount',
-                  '\$${amount.toStringAsFixed(2)}',
-                  isAmount: true,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(IconData? icon, String label, String value,
-      {bool isAmount = false}) {
-    return Column(
-      crossAxisAlignment:
-          isAmount ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 14, color: Colors.grey),
-              const SizedBox(width: 4),
-            ],
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF2C3E50),
-          ),
-        ),
-      ],
-    );
-  }
 }
+

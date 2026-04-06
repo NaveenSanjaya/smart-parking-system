@@ -220,10 +220,36 @@
     color: #1e293b;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
+    transition: all 0.3s ease;
   }
 
-  tr:last-child td {
-    border-bottom: none;
+  tr.row-ready {
+    background-color: #fffbeb;
+    position: relative;
+    
+    td {
+      border-bottom-color: #fef3c7;
+      color: #92400e;
+    }
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background-color: #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    }
+
+    animation: pulse-amber 2s infinite ease-in-out;
+  }
+
+  @keyframes pulse-amber {
+    0% { background-color: #fffbeb; }
+    50% { background-color: #fff7ed; }
+    100% { background-color: #fffbeb; }
   }
 
   .txn-id {
@@ -272,6 +298,32 @@
     background-color: #ef4444;
     color: white;
   }
+  
+  &.ready {
+    background-color: #f59e0b;
+    color: white;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    
+    &::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background-color: white;
+      border-radius: 50%;
+      display: inline-block;
+      animation: blink 1s infinite;
+    }
+  }
+}
+
+@keyframes blink {
+  0% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
 }
 
 .btn-action {

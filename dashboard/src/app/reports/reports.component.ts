@@ -164,12 +164,13 @@ export class ReportsComponent implements OnInit, OnDestroy {
     this.unsubscribeUsers = onSnapshot(collection(db, 'users'), (snap) => {
       this.allUsers = snap.docs.map(doc => {
         const data = doc.data();
+        const regDate = data['registrationDate'] || data['createdAt'] || data['joinedAt'];
         return {
           id: doc.id,
           name: data['name'] || 'Unknown',
           email: data['email'] || '',
           status: data['status'] || 'Active',
-          createdAt: data['createdAt']?.toDate ? data['createdAt'].toDate() : null
+          createdAt: regDate?.toDate ? regDate.toDate() : (regDate instanceof Date ? regDate : null)
         };
       });
       this.updateUserStats();
@@ -181,24 +182,25 @@ export class ReportsComponent implements OnInit, OnDestroy {
     const end = this.endDate ? new Date(this.endDate) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    const filtered = this.allUsers.filter(u => {
-      if (!u.createdAt) return true; // Include old users without string dates if needed, or false. Let's include them.
-      return u.createdAt >= start && u.createdAt <= end;
-    });
-
     const now = new Date();
     let newToday = 0;
-    
     this.allUsers.forEach(u => {
       if (u.createdAt && u.createdAt.toDateString() === now.toDateString()) {
         newToday++;
       }
     });
 
-    this.userStats.totalUsers = filtered.length;
+    // Calculate Global Counts (Always show total regardless of date filter)
+    this.userStats.totalUsers = this.allUsers.length;
+    this.userStats.activeUsers = this.allUsers.filter(u => u.status === 'Active').length;
+    this.userStats.bannedUsers = this.allUsers.filter(u => u.status === 'Banned').length;
     this.userStats.newToday = newToday;
-    this.userStats.activeUsers = filtered.filter(u => u.status === 'Active').length;
-    this.userStats.bannedUsers = filtered.filter(u => u.status === 'Banned').length;
+
+    // Filtered list for detailed analysis if needed (currently used for chart/growth)
+    const filtered = this.allUsers.filter(u => {
+      if (!u.createdAt) return true;
+      return u.createdAt >= start && u.createdAt <= end;
+    });
 
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentYear = new Date().getFullYear();

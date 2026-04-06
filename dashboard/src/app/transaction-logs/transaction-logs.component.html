@@ -90,7 +90,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let txn of filteredTransactions">
+          <tr *ngFor="let txn of filteredTransactions" [class.row-ready]="txn.isReadyForPayment">
             <td class="txn-id">{{ txn.ticketNumber }}</td>
             <td>{{ txn.userName }}</td>
             <td class="text-gray">{{ txn.dateTime }}</td>
@@ -103,10 +103,14 @@
             </td>
             <td>{{ txn.paymentMethod }}</td>
             <td>
-              <span class="status-badge" [ngClass]="txn.status.toLowerCase()">{{ txn.status }}</span>
+              <span class="status-badge" [class.ready]="txn.isReadyForPayment" 
+                    [ngClass]="txn.status.toLowerCase()">
+                {{ txn.isReadyForPayment ? 'READY' : txn.status }}
+              </span>
             </td>
             <td>
-              <button class="btn-action paid" *ngIf="txn.status === 'PENDING'" (click)="markPaid(txn)">
+              <button class="btn-action paid" *ngIf="txn.status === 'PENDING'" (click)="markPaid(txn)"
+                      [style.box-shadow]="txn.isReadyForPayment ? '0 0 10px rgba(16, 185, 129, 0.3)' : ''">
                 Mark Paid
               </button>
               <span class="text-gray" *ngIf="txn.status === 'PAID'" style="font-weight: 500;">✓ Authorized</span>

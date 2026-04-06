@@ -60,17 +60,31 @@ export class AuthService {
       let message = 'An error occurred during login.';
       
       if (error.code && error.code.startsWith('auth/')) {
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-          message = 'Invalid email or password.';
-        } else if (error.code === 'auth/too-many-requests') {
-          message = 'Too many failed login attempts. Please try again later.';
-        } else {
-          message = `Authentication error: ${error.message}`;
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+            message = 'Invalid email address or password. Please check your credentials and try again.';
+            break;
+          case 'auth/invalid-email':
+            message = 'The email address provided is not valid. Please enter a correctly formatted email (e.g., name@example.com).';
+            break;
+          case 'auth/too-many-requests':
+            message = 'Access to this account has been temporarily disabled due to many failed login attempts. Please try again later or reset your password.';
+            break;
+          case 'auth/user-disabled':
+            message = 'This account has been disabled. Please contact system support for assistance.';
+            break;
+          case 'auth/network-request-failed':
+            message = 'A network error occurred. Please check your internet connection and try again.';
+            break;
+          default:
+            message = 'Authentication failed. Please verify your details.';
         }
       } else if (error.code === 'permission-denied') {
-        message = 'Access denied. Your Firestore Security Rules are blocking access to the database.';
+        message = 'Access denied. You do not have the necessary permissions to access the dashboard.';
       } else {
-        message = error.message || 'An unexpected error occurred.';
+        message = 'An unexpected error occurred. Please try again or contact support.';
       }
       
       return { success: false, message };

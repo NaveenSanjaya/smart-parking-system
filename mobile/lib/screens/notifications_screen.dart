@@ -140,69 +140,151 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   // ---------------- NOTIFICATION CARD ----------------
   Widget _notificationCard(NotificationModel notification) {
-    IconData icon = Icons.info;
-    Color iconColor = AppColors.teal;
-    Color iconBg = AppColors.teal.withValues(alpha: 0.15);
-
-    switch (notification.type) {
-      case NotificationType.payment:
-        icon = Icons.check_circle;
-        iconColor = Colors.green;
-        iconBg = const Color(0xFFDFF5E7);
-        break;
-      case NotificationType.parking:
-        icon = Icons.directions_car;
-        iconColor = AppColors.teal;
-        iconBg = AppColors.teal.withValues(alpha: 0.15);
-        break;
-      case NotificationType.warning:
-        icon = Icons.warning;
-        iconColor = Colors.orange;
-        iconBg = Colors.orange.withValues(alpha: 0.15);
-        break;
-      case NotificationType.info:
-        icon = Icons.info;
-        iconColor = AppColors.teal;
-        iconBg = AppColors.teal.withValues(alpha: 0.15);
+    // Determine icon and colors from dashboard data with sensible fallbacks
+    IconData iconData = Icons.notifications;
+    if (notification.icon != null) {
+      iconData = _getMaterialIcon(notification.icon!);
+    } else {
+      // Legacy fallback
+      switch (notification.type) {
+        case NotificationType.payment: iconData = Icons.check_circle; break;
+        case NotificationType.parking: iconData = Icons.directions_car; break;
+        case NotificationType.warning: iconData = Icons.warning; break;
+        case NotificationType.info: iconData = Icons.info; break;
+      }
     }
+
+    final Color iconColor = notification.iconColor != null 
+        ? _parseHexColor(notification.iconColor!) 
+        : (notification.type == NotificationType.payment ? Colors.green : AppColors.primaryColor);
+        
+    final Color iconBg = notification.iconBg != null 
+        ? _parseHexColor(notification.iconBg!) 
+        : iconColor.withValues(alpha: 0.12);
+
+    final bool isGlobal = notification.userId == 'ALL';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: notification.isUnread ? const Color(0xFFF3FBF6) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black12),
+        color: notification.isUnread ? Colors.white : const Color(0xFFF8F9FA),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          if (notification.isUnread)
+            BoxShadow(
+              color: iconColor.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+        ],
+        border: Border.all(
+          color: notification.isUnread ? iconColor.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.05),
+          width: notification.isUnread ? 1.5 : 1,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(icon, color: iconColor),
+          Stack(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(iconData, color: iconColor, size: 24),
+              ),
+              if (notification.isUnread)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(notification.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
-                Text(notification.message, style: const TextStyle(color: Colors.black87)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        notification.title,
+                        style: TextStyle(
+                          fontWeight: notification.isUnread ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 15,
+                          color: AppColors.primaryColor,
+                        ),
+                      ),
+                    ),
+                    if (isGlobal)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'GLOBAL',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 6),
                 Text(
+                  notification.message,
+                  style: TextStyle(
+                    color: notification.isUnread ? Colors.black87 : Colors.black54,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
                   _formatTime(notification.timestamp),
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
           ),
-          if (notification.isUnread) const Icon(Icons.circle, size: 8, color: Colors.black54),
         ],
       ),
     );
+  }
+
+  // ---------------- HELPERS ----------------
+  Color _parseHexColor(String hex) {
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    return Color(int.parse(hex, radix: 16));
+  }
+
+  IconData _getMaterialIcon(String name) {
+    switch (name) {
+      case 'check_circle': return Icons.check_circle;
+      case 'warning': return Icons.warning;
+      case 'build': return Icons.build;
+      case 'stars': return Icons.stars;
+      case 'info': return Icons.info;
+      case 'directions_car': return Icons.directions_car;
+      case 'notifications': return Icons.notifications;
+      default: return Icons.notifications;
+    }
   }
 
   // ---------------- FOOTER BUTTON ----------------

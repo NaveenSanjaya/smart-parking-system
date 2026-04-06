@@ -16,7 +16,7 @@ class ParkingService {
             .toList());
   }
 
-  // Stream of available slots in a level
+  // Stream of available slots in a level (by levelNumber field)
   Stream<List<ParkingSlotModel>> getSlotsByLevel(int levelNumber) {
     return _firestore
         .collection('parking_slots')
@@ -27,7 +27,26 @@ class ParkingService {
             .toList());
   }
 
-  // Admin: update slot availability or maintainance status
+  // Stream of slots for a level derived from section letters in slotNumber
+  // Matches the dashboard logic: A/B → Level 1, C/D → Level 2, E/F → Level 3
+  Stream<List<ParkingSlotModel>> getSlotsByLevelSections(int levelNumber) {
+    final sections = {
+      1: ['A', 'B'],
+      2: ['C', 'D'],
+      3: ['E', 'F'],
+    }[levelNumber] ?? ['A', 'B'];
+
+    return getAllSlots().map(
+      (slots) => slots
+          .where((s) {
+            final section = s.slotNumber.split('-').first.toUpperCase();
+            return sections.contains(section);
+          })
+          .toList(),
+    );
+  }
+
+  // Admin: update slot availability or maintenance status
   Future<void> updateSlotStatus(String slotId, String status) async {
     try {
       await _firestore.collection('parking_slots').doc(slotId).update({
@@ -37,6 +56,33 @@ class ParkingService {
     } catch (e) {
       throw Exception('Failed to update slot status: $e');
     }
+  }
+
+  // Gateway: watch current entry/exit tokens
+  Stream<Map<String, String>> watchGateTokens() {
+    return _firestore
+        .collection('system_config')
+        .doc('current_gate_qrs')
+        .snapshots()
+        .map((doc) {
+      if (!doc.exists) return {'entry': '', 'exit': ''};
+      final data = doc.data() as Map<String, dynamic>;
+      return {
+        'entry': data['entryToken'] ?? '',
+        'exit': data['exitToken'] ?? '',
+      };
+    });
+  }
+
+  // Gateway: find first available slot to auto-assign
+  Future<String?> getFirstAvailableSlot() async {
+    final snapshot = await _firestore
+        .collection('parking_slots')
+        .where('status', isEqualTo: 'AVAILABLE')
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    return snapshot.docs.first.id;
   }
 
   // Create a Parking Session (User scans Entry QR)
@@ -108,11 +154,27 @@ class ParkingService {
     return _firestore
         .collection('parking_sessions')
         .where('userId', isEqualTo: userId)
-        .where('exitTime', isNull: false)
-        .orderBy('entryTime', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ParkingSessionModel.fromJson(doc.data(), doc.id))
-            .toList());
+        .map((snapshot) {
+      final sessions = snapshot.docs
+          .map((doc) => ParkingSessionModel.fromJson(doc.data(), doc.id))
+          .where((s) => s.exitTime != null) // Only completed sessions
+          .toList();
+
+      // Sort by entryTime descending
+      sessions.sort((a, b) => b.entryTime.compareTo(a.entryTime));
+      return sessions;
+    });
+  }
+
+  // Get a single session by its ID for real-time monitoring
+  Stream<ParkingSessionModel?> getSessionStream(String sessionId) {
+    return _firestore
+        .collection('parking_sessions')
+        .doc(sessionId)
+        .snapshots()
+        .map((doc) => doc.exists
+            ? ParkingSessionModel.fromJson(doc.data() as Map<String, dynamic>, doc.id)
+            : null);
   }
 }

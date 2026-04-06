@@ -1,116 +1,154 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/models/parking_session_model.dart';
+import 'package:mobile/models/parking_slot.dart';
 import 'package:mobile/models/pricing_rate_model.dart';
 import 'package:mobile/screens/bottom_navigation.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile/services/parking_service.dart';
 
 class PaymentSuccessfulScreen extends StatelessWidget {
   final ParkingSessionModel session;
-  final PricingRateModel? rate;
+  final List<PricingRateModel>? rates;
+  final Map<String, String>? slotMap;
 
   const PaymentSuccessfulScreen({
     super.key,
     required this.session,
-    this.rate,
+    this.rates,
+    this.slotMap,
   });
 
   // Calculate parking duration string
-  String get _durationString {
-    final exit = session.exitTime ?? DateTime.now();
-    final diff = exit.difference(session.entryTime);
+  String getDurationString(ParkingSessionModel currentSession) {
+    final exit = currentSession.exitTime ?? DateTime.now();
+    final diff = exit.difference(currentSession.entryTime);
     final h = diff.inHours;
     final m = diff.inMinutes % 60;
     if (h > 0) return '$h hour${h != 1 ? 's' : ''} $m minute${m != 1 ? 's' : ''}';
     return '$m minute${m != 1 ? 's' : ''}';
   }
 
-  // Calculate hours as double for billing
-  double get _hoursParked {
-    final exit = session.exitTime ?? DateTime.now();
-    return exit.difference(session.entryTime).inMinutes / 60.0;
-  }
+  // Calculate billing amount based on vehicle type
+  double getCalculatedAmount(ParkingSessionModel currentSession) {
+    if (rates == null || rates!.isEmpty) return 0.0;
 
-  double get _hourlyRate => rate?.hourlyRate ?? 4.0;
-  double get _baseAmount => double.parse((_hoursParked * _hourlyRate).toStringAsFixed(2));
-  double get _serviceFee => double.parse((_baseAmount * 0.05).toStringAsFixed(2)); // 5% service fee
-  double get _totalAmount => double.parse((_baseAmount + _serviceFee).toStringAsFixed(2));
+    final slotNumber = slotMap?[currentSession.slotId] ?? 'A-01';
+    final vehicleType = ParkingSlotModel.getVehicleType(slotNumber);
+
+    final rate = rates!.firstWhere(
+      (r) => r.vehicleType == vehicleType,
+      orElse: () => rates!.first,
+    );
+
+    final exit = currentSession.exitTime ?? DateTime.now();
+    final duration = exit.difference(currentSession.entryTime);
+    final hours = (duration.inMinutes / 60.0).ceil();
+
+    if (hours <= 0) return 0.0;
+
+    double amount = rate.firstHour;
+    if (hours > 1) {
+      amount += (hours - 1) * rate.subsequentHour;
+    }
+
+    if (amount > rate.dailyMax && rate.dailyMax > 0) {
+      amount = rate.dailyMax;
+    }
+
+    return amount;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final exitTime = session.exitTime ?? DateTime.now();
+    return StreamBuilder<ParkingSessionModel?>(
+      stream: ParkingService().getSessionStream(session.sessionId),
+      initialData: session,
+      builder: (context, snapshot) {
+        final currentSession = snapshot.data ?? session;
+        final exitTime = currentSession.exitTime ?? DateTime.now();
+        final amount = getCalculatedAmount(currentSession);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildSuccessHeader(),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  _buildTicketInfoCard(),
-                  const SizedBox(height: 16),
-                  _buildExitInfoCard(exitTime),
-                  const SizedBox(height: 16),
-                  _buildDurationCard(),
-                  const SizedBox(height: 16),
-                  _buildPaymentBreakdownCard(),
-                  const SizedBox(height: 16),
-                  _buildPaymentStatusCard(),
-                  const SizedBox(height: 24),
-                  _buildDoneButton(context),
-                  const SizedBox(height: 30),
-                ],
-              ),
+        return Scaffold(
+          backgroundColor: const Color(0xFFF6F7FB),
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildReceiptHeader(currentSession),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      _buildTicketInfoCard(currentSession),
+                      const SizedBox(height: 16),
+                      _buildExitInfoCard(currentSession, exitTime),
+                      const SizedBox(height: 16),
+                      _buildDurationCard(currentSession),
+                      const SizedBox(height: 16),
+                      _buildPaymentSummaryCard(currentSession, amount),
+                      const SizedBox(height: 16),
+                      _buildPaymentStatusCard(currentSession),
+                      const SizedBox(height: 24),
+                      _buildDoneButton(context),
+                      const SizedBox(height: 30),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildSuccessHeader() {
+  Widget _buildReceiptHeader(ParkingSessionModel currentSession) {
+    final isPaid = currentSession.paymentStatus == 'PAID';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 40),
-      decoration: const BoxDecoration(
-        color: Color(0xFF006400),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isPaid 
+              ? [const Color(0xFF065F46), const Color(0xFF064E3B)] // Green for paid
+              : [const Color(0xFF1E293B), const Color(0xFF0F172A)], // Slate for pending
+        ),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: Colors.white.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check, color: Colors.white, size: 40),
+            child: Icon(isPaid ? Icons.check_circle : Icons.receipt_long, color: Colors.white, size: 40),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Payment Successful',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          Text(
+            isPaid ? 'Payment Confirmed' : 'Digital Receipt',
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Thank you for parking with us',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Text(
+            isPaid ? 'Thank you for your visit!' : 'Session ended successfully',
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTicketInfoCard() {
+  Widget _buildTicketInfoCard(ParkingSessionModel currentSession) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -119,15 +157,15 @@ class PaymentSuccessfulScreen extends StatelessWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.numbers, size: 16, color: Colors.black54),
-                SizedBox(width: 8),
-                Text('Ticket Number', style: TextStyle(color: Colors.black54)),
+                Icon(Icons.confirmation_number_outlined, size: 18, color: Colors.teal),
+                SizedBox(width: 10),
+                Text('Ticket Reference', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500)),
               ],
             ),
             const SizedBox(height: 12),
             Text(
-              session.ticketNumber,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              currentSession.ticketNumber,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ],
         ),
@@ -135,30 +173,30 @@ class PaymentSuccessfulScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildExitInfoCard(DateTime exitTime) {
+  Widget _buildExitInfoCard(ParkingSessionModel currentSession, DateTime exitTime) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Exit Information', style: TextStyle(color: Colors.black54)),
-            const SizedBox(height: 20),
             _buildRowItem(
               Icons.login,
               'Entry Time',
-              DateFormat('MMM d, yyyy  h:mm a').format(session.entryTime),
+              DateFormat('MMM d, h:mm a').format(currentSession.entryTime),
             ),
-            const SizedBox(height: 16),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1),
+            ),
             _buildRowItem(
               Icons.logout,
               'Exit Time',
-              DateFormat('MMM d, yyyy  h:mm a').format(exitTime),
+              DateFormat('MMM d, h:mm a').format(exitTime),
             ),
           ],
         ),
@@ -172,22 +210,23 @@ class PaymentSuccessfulScreen extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 16, color: Colors.black54),
+            Icon(icon, size: 16, color: Colors.black45),
             const SizedBox(width: 8),
             Text(label, style: const TextStyle(color: Colors.black54)),
           ],
         ),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
       ],
     );
   }
 
-  Widget _buildDurationCard() {
+  Widget _buildDurationCard(ParkingSessionModel currentSession) {
     return Card(
       elevation: 0,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade300),
+        side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -196,14 +235,14 @@ class PaymentSuccessfulScreen extends StatelessWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.timer, size: 16, color: Colors.black54),
-                SizedBox(width: 8),
-                Text('Total Duration', style: TextStyle(color: Colors.black54)),
+                Icon(Icons.timer_outlined, size: 18, color: Colors.orange),
+                SizedBox(width: 10),
+                Text('Total Duration', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500)),
               ],
             ),
             Text(
-              _durationString,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              getDurationString(currentSession),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ],
         ),
@@ -211,108 +250,114 @@ class PaymentSuccessfulScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPaymentBreakdownCard() {
-    final hours = _hoursParked;
-    final fullHours = hours.floor();
-    final extraMinutes = ((hours - fullHours) * 60).round();
+  Widget _buildPaymentSummaryCard(ParkingSessionModel currentSession, double amount) {
+    final slotNumber = slotMap?[currentSession.slotId] ?? 'A-01';
+    final vehicleType = ParkingSlotModel.getVehicleType(slotNumber);
+    final isPaid = currentSession.paymentStatus == 'PAID';
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: AppColors.teal,
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.teal.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Payment Breakdown', style: TextStyle(color: Colors.black54)),
-          const SizedBox(height: 20),
-          if (fullHours > 0)
-            _buildPaymentRow(
-              'Base Rate ($fullHours hr × \$${_hourlyRate.toStringAsFixed(2)})',
-              '\$${(fullHours * _hourlyRate).toStringAsFixed(2)}',
-            ),
-          if (fullHours > 0) const SizedBox(height: 12),
-          if (extraMinutes > 0)
-            _buildPaymentRow(
-              'Additional Time ($extraMinutes min)',
-              '\$${(extraMinutes / 60 * _hourlyRate).toStringAsFixed(2)}',
-            ),
-          if (extraMinutes > 0) const SizedBox(height: 12),
-          _buildPaymentRow('Service Fee (5%)', '\$${_serviceFee.toStringAsFixed(2)}'),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white24),
+          Text(
+            'Vehicle Type: ${vehicleType.toUpperCase()}',
+            style: const TextStyle(color: Colors.black45, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
+          const Text(
+            'TOTAL AMOUNT DUE',
+            style: TextStyle(color: Colors.black87, fontSize: 13, letterSpacing: 1.2),
+          ),
+          const SizedBox(height: 8),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.attach_money, size: 20, color: Colors.black54),
-                  SizedBox(width: 4),
-                  Text('Amount Paid', style: TextStyle(color: Colors.black54, fontSize: 16)),
-                ],
+              const Padding(
+                padding: EdgeInsets.only(top: 6, right: 4),
+                child: Text('LKR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.teal)),
               ),
               Text(
-                '\$${_totalAmount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
+                amount.toStringAsFixed(2),
+                style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: Colors.black87),
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: (isPaid ? Colors.green : Colors.amber).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(isPaid ? Icons.check : Icons.info_outline, size: 14, color: isPaid ? Colors.green : Colors.amber),
+                const SizedBox(width: 8),
+                Text(
+                  isPaid ? 'Payment Confirmed' : 'Pay manually at the counter',
+                  style: TextStyle(color: isPaid ? Colors.green : Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPaymentRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(label, style: const TextStyle(color: Colors.black54)),
-        ),
-        Text(value, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  Widget _buildPaymentStatusCard() {
+  Widget _buildPaymentStatusCard(ParkingSessionModel currentSession) {
+    final isPaid = currentSession.paymentStatus == 'PAID';
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.green.shade50,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.check_circle_outline, color: Colors.green),
-              SizedBox(width: 12),
+              Container(
+                width: 12,
+                height: 12,
+                decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text('Payment Status', style: TextStyle(color: Colors.black54, fontSize: 14)),
                   Text(
-                    'Payment Status',
-                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    'Paid on Exit',
-                    style: TextStyle(color: Colors.green, fontSize: 12),
+                    isPaid ? 'Confirmed by Admin' : 'Awaiting Confirmation',
+                    style: const TextStyle(color: Colors.black45, fontSize: 11),
                   ),
                 ],
               ),
             ],
           ),
           Text(
-            session.paymentStatus,
-            style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+            isPaid ? 'PAID' : 'PENDING',
+            style: TextStyle(
+              color: isPaid ? Colors.green : Colors.orange,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -322,7 +367,7 @@ class PaymentSuccessfulScreen extends StatelessWidget {
   Widget _buildDoneButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 54,
+      height: 56,
       child: ElevatedButton(
         onPressed: () {
           Navigator.pushAndRemoveUntil(
@@ -333,12 +378,11 @@ class PaymentSuccessfulScreen extends StatelessWidget {
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 2,
         ),
-        child: const Text(
-          'Done',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-        ),
+        child: const Text('Back to Home', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
   }

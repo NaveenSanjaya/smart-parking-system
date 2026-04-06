@@ -41,15 +41,15 @@ export class LoginComponent {
     let isValid = true;
     
     if (!this.email) {
-      this.emailError = 'Email address is required.';
+      this.emailError = 'Please provide your email address to log in.';
       isValid = false;
     } else if (!this.validateEmail(this.email)) {
-      this.emailError = 'Please enter a valid email address.';
+      this.emailError = 'The email address you entered doesn\'t look right. Please check for typos.';
       isValid = false;
     }
     
     if (!this.password) {
-      this.passwordError = 'Password is required.';
+      this.passwordError = 'Your password is required to continue.';
       isValid = false;
     }
     
@@ -76,23 +76,23 @@ export class LoginComponent {
     this.loginError = '';
 
     if (!this.email) {
-      this.emailError = 'Please enter your email address above to reset your password.';
+      this.emailError = 'Please enter your email address to receive a reset link.';
       return;
     }
 
     if (!this.validateEmail(this.email)) {
-      this.emailError = 'Please enter a valid email address.';
+      this.emailError = 'The email address format is incorrect. Please double-check it.';
       return;
     }
 
     try {
       await this.authService.resetPassword(this.email);
-      alert('A password reset link has been sent to your email address.');
+      alert('Success! A password reset link has been sent to your inbox. Please check your email.');
     } catch (error: any) {
       if (error.code === 'auth/user-not-found') {
-        this.loginError = 'No account found with this email address.';
+        this.loginError = 'We couldn\'t find an account associated with this email address.';
       } else {
-        this.loginError = 'Failed to send password reset email. Please try again.';
+        this.loginError = 'We encountered an error sending the reset email. Please try again in a few moments.';
       }
     }
   }

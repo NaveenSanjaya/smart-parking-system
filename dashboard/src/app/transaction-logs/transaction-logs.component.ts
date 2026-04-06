@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { db } from '../firebase.config';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp, setDoc, addDoc } from 'firebase/firestore';
+import { ParkingRatesService, ParkingRate } from '../services/parking-rates.service';
+import { AuthService } from '../services/auth.service';
+import { inject } from '@angular/core';
 
 interface Transaction {
   id: string; // Document ID
@@ -16,7 +19,9 @@ interface Transaction {
   status: string; // 'PAID' or 'PENDING'
   vehicleType: string;
   rawEntryDate: Date | null;
+  rawExitDate: Date | null;
   fullUserId: string;
+  isReadyForPayment: boolean;
 }
 
 @Component({
@@ -26,6 +31,11 @@ interface Transaction {
   styleUrl: './transaction-logs.component.scss'
 })
 export class TransactionLogsComponent implements OnInit, OnDestroy {
+  private ratesService = inject(ParkingRatesService);
+  private authService = inject(AuthService);
+  private rates: Record<string, ParkingRate> = {};
+  
+  currentAdminName: string = 'Admin';
   selectedDate: string = '';
   selectedStatus: string = 'All Statuses';
   searchQuery: string = '';
@@ -38,7 +48,23 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
   entryQrUrl = '';
   exitQrUrl = '';
 
-  ngOnInit() {
+  async ngOnInit() {
+    // Fetch latest rates for accurate calculations
+    const carRate = await this.ratesService.getLatestRate('car');
+    const bikeRate = await this.ratesService.getLatestRate('bike');
+    const threeWheelerRate = await this.ratesService.getLatestRate('threeWheeler');
+    if (carRate) this.rates['car'] = carRate;
+    if (bikeRate) this.rates['bike'] = bikeRate;
+    if (threeWheelerRate) this.rates['threeWheeler'] = threeWheelerRate;
+
+    // Fetch current admin name for marking records
+    this.authService.user$.subscribe(async (user) => {
+      if (user) {
+        const details = await this.authService.getAdminDetails(user.uid);
+        this.currentAdminName = details?.['adminName'] || details?.['name'] || user.displayName || user.email?.split('@')[0] || 'Admin';
+      }
+    });
+
     this.unsubscribeSessions = onSnapshot(collection(db, 'parking_sessions'), (snap) => {
       this.transactions = snap.docs.map(docSnap => {
         const data = docSnap.data();
@@ -56,14 +82,28 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
           duration = `${Math.floor(mins / 60)}h ${mins % 60}m`;
         }
 
-        // Mock Amount based on duration (100 LKR per hour approx for demo)
-        let amt = 0;
-        if (entryDate) {
+        // Use actual amount from DB (stored on exit) or calculate dynamically as fallback
+        let amt = data['amount'] || data['totalAmount'] || 0;
+        
+        if (amt === 0 && entryDate) {
           const end = exitDate || new Date();
           const diffMs = end.getTime() - entryDate.getTime();
           const hours = Math.ceil(diffMs / 3600000);
-          amt = hours * 100;
+          
+          // Use vehicle-specific rates
+          const vType = (data['vehicleType'] || 'car').toLowerCase();
+          const rate = this.rates[vType] || this.rates['car'] || { firstHour: 100, subsequentHour: 100 };
+          amt = rate.firstHour + (Math.max(0, hours - 1) * rate.subsequentHour);
         }
+
+        // Manual Payment Recognition Logic:
+        // Strictly use the database paymentStatus AND check for manual admin confirmation.
+        // This prevents automatic mobile/IoT updates from hiding the Admin action button.
+        const isAdminConfirmed = !!(data['paymentStatus'] === 'PAID' && data['markerByAdmin']);
+        const finalStatus = isAdminConfirmed ? 'PAID' : 'PENDING';
+
+        // READY State: If exitTime exists but Admin hasn't marked as PAID yet
+        const isReadyForPayment = !!(exitDate && !isAdminConfirmed);
 
         return {
           id: docSnap.id,
@@ -73,10 +113,12 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
           duration: duration,
           amount: amt,
           paymentMethod: 'Manual/Cash',
-          status: data['paymentStatus'] || 'PENDING',
-          vehicleType: 'Car', // Statically mapping until vehicles fetched properly
+          status: finalStatus,
+          vehicleType: data['vehicleType'] || 'Car',
           rawEntryDate: entryDate,
-          fullUserId: data['userId'] || ''
+          rawExitDate: exitDate,
+          fullUserId: data['userId'] || '',
+          isReadyForPayment: isReadyForPayment
         };
       });
     });
@@ -93,7 +135,9 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
       await updateDoc(docRef, {
         paymentStatus: 'PAID',
         paymentTime: serverTimestamp(),
-        markerByAdmin: 'Admin'
+        markerByAdmin: this.currentAdminName,
+        amount: txn.amount,
+        finalAmount: txn.amount
       });
 
       // Automatically send "Payment Successful" notification
@@ -160,7 +204,7 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
   }
 
   get filteredTransactions() {
-    return this.transactions.filter(txn => {
+    const list = this.transactions.filter(txn => {
       const matchStatus = this.selectedStatus === 'All Statuses' || txn.status === this.selectedStatus;
       
       let matchDate = true;
@@ -179,6 +223,25 @@ export class TransactionLogsComponent implements OnInit, OnDestroy {
       }
 
       return matchStatus && matchDate && matchSearch;
+    });
+
+    // Intelligent Sorting:
+    // 1. PIN "READY" sessions to the top
+    // 2. Sort READY sessions by most recent exit time
+    // 3. Sort Others by most recent entry time
+    return list.sort((a, b) => {
+      if (a.isReadyForPayment && !b.isReadyForPayment) return -1;
+      if (!a.isReadyForPayment && b.isReadyForPayment) return 1;
+
+      if (a.isReadyForPayment && b.isReadyForPayment) {
+        const timeA = a.rawExitDate?.getTime() || 0;
+        const timeB = b.rawExitDate?.getTime() || 0;
+        return timeB - timeA;
+      }
+
+      const entryA = a.rawEntryDate?.getTime() || 0;
+      const entryB = b.rawEntryDate?.getTime() || 0;
+      return entryB - entryA;
     });
   }
 

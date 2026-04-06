@@ -9,7 +9,8 @@ import {
   updateDoc,
   query,
   where,
-  limit
+  limit,
+  serverTimestamp
 } from 'firebase/firestore';
 
 export interface User {
@@ -82,7 +83,10 @@ export class UserService {
   }
 
   async addUser(user: Partial<User>): Promise<void> {
-    const data = { ...user };
+    const data = { 
+      ...user,
+      createdAt: serverTimestamp() // Add registration timestamp for statistics
+    };
     delete data.id; // Ensure we don't save the id within the document fields
     await addDoc(collection(db, this.collectionName), data);
   }

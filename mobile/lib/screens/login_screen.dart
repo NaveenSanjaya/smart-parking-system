@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/utils/ui_utils.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -35,8 +36,10 @@ class _SignInScreenState extends State<SignInScreen> {
         if (mounted) Navigator.pushReplacementNamed(context, '/home');
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceAll('Exception: Login failed: ', '')), backgroundColor: Colors.red),
+          UIUtils.showSnackBar(
+            context,
+            UIUtils.getFriendlyErrorMessage(e),
+            isError: true,
           );
         }
       } finally {
@@ -256,6 +259,9 @@ class _SignInScreenState extends State<SignInScreen> {
                     'https://developers.google.com/identity/images/g-logo.png',
                     width: 24,
                     height: 24,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.g_mobiledata, color: Colors.blue, size: 30);
+                    },
                   ),
                   label: const Text(
                     'Continue with Google',

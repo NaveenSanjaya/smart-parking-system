@@ -137,7 +137,7 @@
                         <h4>Recent Activity</h4>
                     </div>
                     <div class="activity-list">
-                        @for (activity of activities; track activity.title) {
+                        @for (activity of activities; track activity.timestampMs + activity.type) {
                         <div class="activity-item">
                             <div class="activity-icon-area">
                                 <div class="status-icon" [ngClass]="{'success': activity.type === 'PENDING', 'info': activity.type === 'PAID'}">

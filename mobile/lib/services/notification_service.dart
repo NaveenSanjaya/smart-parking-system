@@ -4,11 +4,11 @@ import '../models/notification_model.dart';
 class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Stream user notifications
+  // Stream user notifications (User-specific + Broadcast)
   Stream<List<NotificationModel>> getUserNotifications(String userId) {
     return _firestore
         .collection('notifications')
-        .where('userId', isEqualTo: userId)
+        .where('userId', whereIn: [userId, 'ALL'])
         .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
@@ -19,7 +19,11 @@ class NotificationService {
   // Mark notification as read
   Future<void> markAsRead(String notificationId) async {
     try {
-      await _firestore.collection('notifications').doc(notificationId).update({'isUnread': false});
+      // Update both 'read' (dashboard) and 'isUnread' (legacy) for full compatibility
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'read': true,
+        'isUnread': false,
+      });
     } catch (e) {
       throw Exception('Failed to mark notification as read: $e');
     }

@@ -75,14 +75,31 @@ class _HomeScreenState extends State<HomeScreen> {
           stream: _parkingService.getAllSlots(),
           builder: (context, snapshot) {
             final slots = snapshot.data ?? [];
+            final isLive = snapshot.connectionState == ConnectionState.active ||
+                snapshot.connectionState == ConnectionState.done;
+
+            // Group by section letter — matches dashboard logic exactly:
+            // A/B → Level 1, C/D → Level 2, E/F → Level 3
+            final Map<int, List<ParkingSlotModel>> byLevel = {1: [], 2: [], 3: []};
+            for (final s in slots) {
+              final section = s.slotNumber.split('-').first.toUpperCase();
+              if (['A', 'B'].contains(section)) {
+                byLevel[1]!.add(s);
+              } else if (['C', 'D'].contains(section)) {
+                byLevel[2]!.add(s);
+              } else if (['E', 'F'].contains(section)) {
+                byLevel[3]!.add(s);
+              }
+            }
+
             final levels = [1, 2, 3].map((l) {
-              final levelSlots = slots.where((s) => s.levelNumber == l);
+              final levelSlots = byLevel[l]!;
               final available =
                   levelSlots.where((s) => s.status == 'AVAILABLE').length;
               return {
                 'level': 'Level $l',
                 'available': available,
-                'total': levelSlots.isEmpty ? 100 : levelSlots.length,
+                'total': levelSlots.isEmpty ? 0 : levelSlots.length,
               };
             }).toList();
 
@@ -94,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeaderCard(totalAvailable.toString()),
+                  _buildHeaderCard(totalAvailable.toString(), isLive: isLive),
                   const SizedBox(height: 24),
                   const Text(
                     'Parking Levels',
@@ -117,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ---------------- UI Components ----------------
 
-  Widget _buildHeaderCard(String totalAvailable) {
+  Widget _buildHeaderCard(String totalAvailable, {bool isLive = false}) {
     final displayName = _userProfile?.name ?? 
         (_authService.currentUser?.uid != null
             ? 'USR-${_authService.currentUser!.uid.substring(0, 8)}'
@@ -191,23 +208,79 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Updated in real-time',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isLive
+                            ? const Color(0xFF4ADE80) // green when live
+                            : Colors.white38,
+                        shape: BoxShape.circle,
+                        boxShadow: isLive
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF4ADE80).withValues(alpha: 0.6),
+                                  blurRadius: 6,
+                                  spreadRadius: 2,
+                                )
+                              ]
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isLive ? 'Live · Updates automatically' : 'Connecting...',
+                      style: TextStyle(
+                        color: isLive ? const Color(0xFF4ADE80) : Colors.white38,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
         ],
       ),
+
     );
   }
 
   Widget _buildParkingLevelCard(Map<String, dynamic> level) {
     final int total = level['total'] as int;
     final int available = level['available'] as int;
-    final double progress = total > 0 ? available / total : 0;
+    final int occupied = total - available;
+    // progress = how full (occupied / total), so bar fills as spaces get taken
+    final double progress = total > 0 ? occupied / total : 0;
+
+    // Color based on availability
+    Color availColor;
+    if (total == 0) {
+      availColor = Colors.grey;
+    } else if (available == 0) {
+      availColor = const Color(0xFFEF4444); // red — full
+    } else if (available / total < 0.3) {
+      availColor = const Color(0xFFF59E0B); // amber — almost full
+    } else {
+      availColor = const Color(0xFF10B981); // green — plenty available
+    }
+
+    // Progress bar color matches availability
+    Color barColor;
+    if (total == 0) {
+      barColor = Colors.grey.shade300;
+    } else if (available == 0) {
+      barColor = const Color(0xFFEF4444);
+    } else if (available / total < 0.3) {
+      barColor = const Color(0xFFF59E0B);
+    } else {
+      barColor = AppColors.primaryColor;
+    }
 
     return GestureDetector(
       onTap: () {
@@ -239,33 +312,62 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.teal,
+                  decoration: BoxDecoration(
+                    color: availColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.directions_car, color: Colors.white),
+                  child: Icon(Icons.local_parking, color: availColor, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    level['level'],
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        level['level'],
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      Text(
+                        total == 0
+                            ? 'No data yet'
+                            : '$occupied of $total slots occupied',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
                   ),
                 ),
-                Text('$available / $total'),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: availColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    total == 0 ? '—' : '$available free',
+                    style: TextStyle(
+                      color: availColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-                backgroundColor: const Color(0xFFE5E1E6),
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.primaryColor),
+            if (total > 0) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  backgroundColor: const Color(0xFFE5E1E6),
+                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

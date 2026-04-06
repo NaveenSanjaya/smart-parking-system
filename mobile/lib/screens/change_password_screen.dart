@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/constants/app_colors.dart';
 import 'package:mobile/services/auth_service.dart';
+import 'package:mobile/utils/ui_utils.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -37,21 +38,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           _newPasswordController.text,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Password updated successfully'),
-              backgroundColor: Colors.green,
-            ),
+          UIUtils.showSnackBar(
+            context,
+            'Password updated successfully',
+            isError: false,
           );
           Navigator.pop(context);
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString().replaceAll('Exception: Failed to change password: ', '')),
-               backgroundColor: Colors.red,
-            ),
+          UIUtils.showSnackBar(
+            context,
+            UIUtils.getFriendlyErrorMessage(e),
+            isError: true,
           );
         }
       } finally {
